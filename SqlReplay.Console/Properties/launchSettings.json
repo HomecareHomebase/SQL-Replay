@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "SqlReplay.Console": {
+      "commandName": "Project"
+    }
+  }
+}

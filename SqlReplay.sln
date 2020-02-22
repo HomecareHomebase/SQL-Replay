@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.572
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlReplay.Console", "SqlReplay.Console\SqlReplay.Console.csproj", "{1A0940B4-810B-42DE-A923-61F83BE0784E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1A0940B4-810B-42DE-A923-61F83BE0784E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A0940B4-810B-42DE-A923-61F83BE0784E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A0940B4-810B-42DE-A923-61F83BE0784E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A0940B4-810B-42DE-A923-61F83BE0784E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {829C3135-FE4C-4285-B325-9B90FFC8DC0F}
+	EndGlobalSection
+EndGlobal
