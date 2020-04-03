@@ -5,6 +5,7 @@
     using System.Runtime.Serialization.Formatters.Binary;
     using System.Collections.Generic;
     using System;
+    using SqlReplay.Console.CustomPreProcessing;
 
     internal class Program
     {
@@ -12,30 +13,56 @@
         {
             string command = args[0];
 
-            if (command == "prep")
-            {
-                string inputPath = args[1];
-                string outputPath = args[2];
-                short clients = short.Parse(args[3]);
-                string connectionString = args[4];
-                DateTimeOffset? cutoff = null;
-                if (args.Length > 5)
-                {
-                    cutoff = DateTimeOffset.Parse(args[5]);
-                }
+            string outputPath;
+            short clients;
 
-                await Prep(Directory.GetFiles(inputPath), outputPath, clients, connectionString, cutoff);
-            }
-            else if (command == "run")
+            switch (command)
             {
-                string filePath = args[1];
-                string cs = null;
-                if (args.Length > 2)
-                {
-                    cs = args[2];
-                }
+                case "prep":
+                    string inputPath = args[1];
+                    outputPath = args[2];
+                    clients = short.Parse(args[3]);
+                    string connectionString = args[4];
 
-                await Run(filePath, cs);
+                    DateTimeOffset? cutoff = null;
+                    if (args.Length > 5)
+                    {
+                        cutoff = DateTimeOffset.Parse(args[5]);
+                    }
+
+                    await Prep(Directory.GetFiles(inputPath), outputPath, clients, connectionString, cutoff);
+                    break;
+
+                case "prepnosc":
+                    outputPath = args[1];
+                    clients = short.Parse(args[2]);
+                    int numSessions = int.Parse(args[3]);
+                    DateTime start = DateTime.Parse(args[4]);
+                    string spName = args[5];
+                    string parmLoader = args[6];
+
+                    int? runTimeHours = null;
+                    if (args.Length > 7)
+                    {
+                       runTimeHours = args[7] == null ? (int?)null : int.Parse(args[7]);
+                    }
+
+                    
+                    await PrepNewOrSignatureChange(outputPath, clients, numSessions, start, spName, parmLoader, runTimeHours);
+                    break;
+
+                case "run":
+                    string filePath = args[1];
+                    string cs = null;
+                    if (args.Length > 2)
+                    {
+                        cs = args[2];
+                    }
+
+                    await Run(filePath, cs);
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -43,6 +70,20 @@
         {
             var preProcessor = new PreProcessor();
             Run run = await preProcessor.PreProcess(fileNames, connectionString, cutoff);
+
+            await ProcessPrep(run, outputPath, clients, connectionString);
+        }
+
+        internal static async Task PrepNewOrSignatureChange(string outputPath, int clients, int numberOfSessions, DateTime startDateTime, string storedProcedureName, string parameterLoader, int? runTimeInHours)
+        {
+            var preProcessor = new CustomPreProcessing.CustomPreProcessor(numberOfSessions, startDateTime, storedProcedureName, parameterLoader, runTimeInHours);
+            Run run = preProcessor.GenerateRun();
+
+            await ProcessPrep(run, outputPath, clients, null);
+        }
+
+        internal static async Task ProcessPrep(Run run, string outputPath, int clients, string connectionString)
+        {
             Run[] runs = new Run[clients];
             for (var i = 0; i < clients; ++i)
             {
