@@ -16,39 +16,6 @@
             System.Threading.ThreadPool.SetMaxThreads(32767, 32767);
             System.Threading.ThreadPool.SetMinThreads(32767, 32767);
 
-            //Start warming up connection pool to Min Pool Size set in connection string
-            try
-            {
-                using (var con = new SqlConnection(run.ConnectionString))
-                {
-                    con.Open();
-                }
-            }
-            catch
-            {
-                try
-                {
-                    using (var con = new SqlConnection(run.ConnectionString))
-                    {
-                        con.Open();
-                    }
-                }
-                catch
-                {
-                    try
-                    {
-                        using (var con = new SqlConnection(run.ConnectionString))
-                        {
-                            con.Open();
-                        }
-                    }
-                    catch
-                    {
-                        throw;
-                    }
-                }
-            }
-
             Console.WriteLine("Preparing 15 second buckets...");
 
             //DuplicateEvents(run, 4); //synthetically increase load
