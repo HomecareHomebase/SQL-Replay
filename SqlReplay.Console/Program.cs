@@ -44,7 +44,7 @@
                     int? runTimeHours = null;
                     if (args.Length > 7)
                     {
-                       runTimeHours = args[7] == null ? (int?)null : int.Parse(args[7]);
+                       runTimeHours = (int?)int.Parse(args[7]);
                     }
 
                     

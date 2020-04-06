@@ -2,7 +2,7 @@
 using System.Linq;
 using SqlReplay.Console.CustomPreProcessing.ParameterSignatures;
 
-namespace SqlReplay.Console.CustomPreProcessing
+namespace SqlReplay.Console.CustomPreProcessing.ParameterLoaders
 {
     internal class GdasParameterLoader : IParameterLoader
     {
