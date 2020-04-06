@@ -15,7 +15,7 @@ namespace SqlReplay.Console.CustomPreProcessing
         private readonly IParameterLoader parmLoader;
         private readonly Double eventTimeOffset;
 
-        private const String parmLoaderNamespace = "SqlReplay.Console.CustomPreProcessing.ParameterLoaders";
+        private const String parmLoaderNamespace = "SqlReplay.Console.CustomRuns.ParameterLoaders";
         private const int secondsPerHour = 3600;
         private const int defaultRunTimeInHours = 2;
 
@@ -39,24 +39,17 @@ namespace SqlReplay.Console.CustomPreProcessing
 
         public Run GenerateRun()
         {
-            // Create Session, with RPC Event
+            // Create Session, with RPC Event, 
             GenerateSessions();
-
-            // Determine max string length of EventSequence to allow "numerical" OrderBy sorting below
-            int maxSequenceLength = sessions.Values.Max(x => x.Events[0].EventSequence.Length);
-
-            /* If a future update to this custom implementation allows for multiple events per session,
-               uncomment the block below to ensure the events are sorted numerically in ascending fashion.
-            */
-
-            //foreach (Session session in sessions.Values)
-            //{
-            //    session.Events = session.Events.OrderBy(e => e.EventSequence.PadLeft(maxSequenceLength, '0')).ToList();
-            //}
+            
+            foreach (Session session in sessions.Values)
+            {
+                session.Events = session.Events.OrderBy(e => e.EventSequence).ToList();
+            }
 
             var run = new Run()
             {
-                Sessions = sessions.Values.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().EventSequence.PadLeft(maxSequenceLength, '0')).ToList()
+                Sessions = sessions.Values.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().EventSequence).ToList()
             };
 
             run.EventCaptureOrigin = run.Sessions.First().Events.First().Timestamp;
