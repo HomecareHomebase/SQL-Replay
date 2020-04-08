@@ -1,0 +1,43 @@
+[
+    {
+      "ParameterName": "@param1",
+      "AssignmentType": "Iterative",
+      "Properties": {
+          "DBType": "Int",
+          "Size": 4,
+          "Precision": 10,
+          "Scale": 0,
+          "Direction": "Input",
+          "Value": null,
+          "IsNullable": false
+        },
+        "Values": [
+          1010,
+	  2020,
+	  3030,
+ 	  4040,
+	  5050,
+	  6060,
+	  7777,
+	  8888,
+	  9876,	
+	  9999		
+        ]
+    
+    },
+    {
+      "ParameterName": "@param2",
+      "AssignmentType": "Static",
+      "Properties": {
+          "DBType": "DateTime",
+          "Size": 8,
+          "Precision": 10,
+          "Scale": 0,
+          "Direction": "Input",
+          "Value": null,
+          "IsNullable": true
+        },
+    "Values": []
+    }
+  ]
+  
