@@ -245,7 +245,7 @@
                     Scale = param.Scale,
                     Direction = param.Direction
                 };
-                if (param.SqlDbType == SqlDbType.Structured)
+                if (param.SqlDbType == SqlDbType.Structured && param.Value != DBNull.Value)
                 {
                     var userType = (UserType)param.Value;
                     if (userType.Rows.Count > 0)
@@ -281,10 +281,12 @@
                                     case SqlDbType.Date:
                                     case SqlDbType.Time:
                                     case SqlDbType.DateTime2:
-                                        sqlDataRecord.SetValue(i, DateTime.Parse(row[i].ToString()));
+                                        DateTime.TryParse(row[i].ToString(), out var dateTime);
+                                        sqlDataRecord.SetValue(i, dateTime);
                                         break;
                                     case SqlDbType.DateTimeOffset:
-                                        sqlDataRecord.SetValue(i, DateTimeOffset.Parse(row[i].ToString()));
+                                        DateTimeOffset.TryParse(row[i].ToString(), out var dateTimeOffset);
+                                        sqlDataRecord.SetValue(i, dateTimeOffset);
                                         break;
                                     default:
                                         sqlDataRecord.SetValue(i, row[i]);
