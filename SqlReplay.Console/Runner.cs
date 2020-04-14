@@ -86,7 +86,7 @@
                         {
                             TransactionId = model.TransactionId,
                             TransactionState = "Commit",
-                            EventSequence = (int.Parse(model.EventSequence) + 1).ToString(),
+                            EventSequence = model.EventSequence + 1,
                             Timestamp = model.Timestamp.AddMilliseconds(100)
                         });
                     }

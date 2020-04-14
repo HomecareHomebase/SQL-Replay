@@ -46,7 +46,7 @@
                         {
                             evt = new Rpc()
                             {
-                                EventSequence = xevent.Actions["event_sequence"].ToString(),
+                                EventSequence = long.Parse(xevent.Actions["event_sequence"].ToString()),
                                 TransactionId = xevent.Actions["transaction_id"].ToString(),
                                 Statement = xevent.Fields["statement"].ToString(),
                                 ObjectName = xevent.Fields["object_name"].ToString(),
@@ -61,7 +61,7 @@
                             {
                                 evt = new Transaction()
                                 {
-                                    EventSequence = xevent.Actions["event_sequence"].ToString(),
+                                    EventSequence = long.Parse(xevent.Actions["event_sequence"].ToString()),
                                     TransactionId = xevent.Fields["transaction_id"].ToString(),
                                     TransactionState = xevent.Fields["transaction_state"].ToString(),
                                     Timestamp = xevent.Timestamp
@@ -73,7 +73,7 @@
                         {
                             var bulkInsert = new BulkInsert()
                             {
-                                EventSequence = xevent.Actions["event_sequence"].ToString(),
+                                EventSequence = long.Parse(xevent.Actions["event_sequence"].ToString()),
                                 TransactionId = xevent.Actions["transaction_id"].ToString(),
                                 BatchText = xevent.Fields["batch_text"].ToString(),
                                 Timestamp = xevent.Timestamp

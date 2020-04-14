@@ -5,7 +5,7 @@
     [Serializable]
     public abstract class Event
     {
-        public string EventSequence { get; set; }
+        public long EventSequence { get; set; }
         public string TransactionId { get; set; }        
         public DateTimeOffset Timestamp { get; set; }
     }
