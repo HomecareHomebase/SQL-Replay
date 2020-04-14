@@ -15,6 +15,7 @@
     internal class PreProcessor
     {
         private Dictionary<string, Dictionary<string, Parameter>> procedureParameters = new Dictionary<string, Dictionary<string, Parameter>>();
+        private Dictionary<int, List<UserTypeColumn>> userTypeColumnDefinitions = new Dictionary<int, List<UserTypeColumn>>();
 
         internal async Task<Run> PreProcess(string[] fileNames, string connectionString, DateTimeOffset? cutoff)
         {
@@ -187,8 +188,9 @@
             {
                 parameters = new Dictionary<string, Parameter>();
                 using (var cmd = new SqlCommand(@"
-                select [Name]=[name], [Type]=type_name(user_type_id), [Length]=max_length, [Precision]=[precision], [Scale]=[scale], IsOutput=is_output
-                from sys.all_parameters
+                select [Name]=p.[name], [Type]=type_name(p.system_type_id), [Length]=p.max_length, [Precision]=p.[precision], [Scale]=p.[scale], IsOutput=p.is_output, TypeName=schema_name(tt.schema_id) + '.' + type_name(tt.user_type_id), UserTypeId=tt.user_type_id
+                from sys.all_parameters p
+                left join sys.table_types tt on tt.user_type_id = p.user_type_id
                 where object_id = object_id(@procedure)
                 order by parameter_id", con))
                 {
@@ -198,24 +200,14 @@
                         while (reader.Read())
                         {
                             var parameter = reader.GetString(0);
-                            string rawSqlDbType = reader.GetString(1);
+                            var rawSqlDbType = reader.GetString(1);                            
                             var size = (int)reader.GetInt16(2);
                             var precision = reader.GetByte(3);
                             var scale = reader.GetByte(4);
                             var isOutput = reader.GetBoolean(5);
-                            SqlDbType sqlDbType;
-                            if (rawSqlDbType == "sysname")
-                            {
-                                sqlDbType = SqlDbType.NVarChar;
-                            }
-                            else if (rawSqlDbType == "numeric")
-                            {
-                                sqlDbType = SqlDbType.Decimal;
-                            }
-                            else if (!Enum.TryParse(rawSqlDbType, true, out sqlDbType))
-                            {
-                                sqlDbType = SqlDbType.Udt;
-                            }
+                            var typeName = (!reader.IsDBNull(6)) ? reader.GetString(6) : null;
+                            var userTypeId = (!reader.IsDBNull(7)) ? (int?)reader.GetInt32(7) : null;
+                            var sqlDbType = GetSqlDbType(rawSqlDbType);                            
 
                             if (string.IsNullOrWhiteSpace(parameter) && isOutput)
                             {
@@ -227,24 +219,18 @@
                                 new Parameter
                                 {
                                     Name = parameter,
-                                    DbType = sqlDbType,
+                                    SqlDbType = sqlDbType,                                    
                                     Size = size,
                                     Precision = precision,
                                     Scale = scale,
-                                    Direction = (isOutput) ? ParameterDirection.Output : ParameterDirection.Input
+                                    Direction = (isOutput) ? ParameterDirection.Output : ParameterDirection.Input,
+                                    TypeName = typeName,
+                                    UserTypeId = userTypeId
                                 });
                         }
                     }
                 }
                 this.procedureParameters.Add(rpc.Procedure, parameters);
-            }
-
-            //Throw back anything that has a UDT parameter if we are dealing with any Statement besides a basic exec
-            if (!rpc.Statement.StartsWith("exec ") && parameters.Any(p => p.Value.DbType == SqlDbType.Udt))
-            {
-                //Set Procedure back to null since we want to just execute the Statement as CommandText (SQLBatch) rather than execute as StoredProcedure with parameters (RPC)
-                rpc.Procedure = null;
-                return;
             }
 
             //substitute ||| for commas as parameter delimiter due to potential for commas in strings
@@ -263,100 +249,105 @@
                 var rpcParam = new Parameter
                 {
                     Name = dictParam.Name,
-                    DbType = dictParam.DbType,
+                    SqlDbType = dictParam.SqlDbType,                    
                     Size = dictParam.Size,
                     Precision = dictParam.Precision,
                     Scale = dictParam.Scale,
-                    Direction = dictParam.Direction
+                    Direction = dictParam.Direction,
+                    TypeName = dictParam.TypeName,
+                    UserTypeId = dictParam.UserTypeId
                 };
                 if (value != "NULL" && value != "default")
                 {
                     if (value.Contains('\''))
                     {
-                        var start = value.IndexOf('\'') + 1;
-                        var stringValue = value.Substring(start, value.Length - start - 1);
-                        if (rpcParam.DbType == SqlDbType.UniqueIdentifier)
-                        {
-                            rpcParam.Value = Guid.Parse(stringValue);
-                        }
-                        else
-                        {
-                            rpcParam.Value = stringValue;
-                        }
+                        rpcParam.Value = GetSystemValueFromSqlString(value, rpcParam.SqlDbType);
                     }
                     else if (!(value.StartsWith('@') || value.EndsWith(" output")))
                     {
-                        switch (rpcParam.DbType)
-                        {
-                            case SqlDbType.BigInt:
-                                rpcParam.Value = long.Parse(value);
-                                break;
-                            case SqlDbType.Bit:
-                                rpcParam.Value = Convert.ToBoolean(byte.Parse(value));
-                                break;
-                            case SqlDbType.Char:
-                            case SqlDbType.NChar:
-                            case SqlDbType.VarChar:
-                            case SqlDbType.NVarChar:
-                            case SqlDbType.Text:
-                            case SqlDbType.NText:
-                                rpcParam.Value = value;
-                                break;
-                            case SqlDbType.Decimal:
-                            case SqlDbType.Money:
-                            case SqlDbType.SmallMoney:
-                                rpcParam.Value = decimal.Parse(value);
-                                break;
-                            case SqlDbType.Float:
-                                rpcParam.Value = double.Parse(value);
-                                break;
-                            case SqlDbType.Int:
-                                rpcParam.Value = decimal.ToInt32(decimal.Parse(value));
-                                break;
-                            case SqlDbType.Real:
-                                rpcParam.Value = float.Parse(value);
-                                break;
-                            case SqlDbType.UniqueIdentifier:
-                                rpcParam.Value = Guid.Parse(value);
-                                break;
-                            case SqlDbType.SmallInt:
-                                rpcParam.Value = short.Parse(value);
-                                break;
-                            case SqlDbType.TinyInt:
-                                rpcParam.Value = byte.Parse(value);
-                                break;
-                            case SqlDbType.SmallDateTime:
-                            case SqlDbType.DateTime:
-                            case SqlDbType.Date:
-                            case SqlDbType.Time:
-                            case SqlDbType.DateTime2:
-                                rpcParam.Value = DateTime.Parse(value);
-                                break;
-                            case SqlDbType.DateTimeOffset:
-                                rpcParam.Value = DateTimeOffset.Parse(value);
-                                break;
-                            case SqlDbType.Binary:
-                            case SqlDbType.Image:
-                            case SqlDbType.Timestamp:
-                            case SqlDbType.VarBinary:
-                                rpcParam.Value = Encoding.UTF8.GetBytes(value);
-                                break;
-                            default:
-                                throw new Exception(rpcParam.DbType + " is not a supported SqlDbType");                                
-                        }
+                        rpcParam.Value = GetSystemValue(value, rpcParam.SqlDbType);
                     }
                     else if (value.StartsWith('@') && !value.EndsWith(" output"))
                     {
-                        if (rpcParam.DbType == SqlDbType.Xml)
+                        if (rpcParam.SqlDbType == SqlDbType.Xml)
                         {
                             string xmlConvert = rpc.Statement.Substring(rpc.Statement.IndexOf($"set {value}=", StringComparison.CurrentCulture)).GetParenthesesContent();
                             int xmlBegin = xmlConvert.IndexOf('\'');
                             string xmlContent = xmlConvert.Substring(xmlBegin + 1, xmlConvert.Length - xmlBegin - 2);
                             rpcParam.Value = xmlContent;// new SqlXml(new MemoryStream(Encoding.UTF8.GetBytes(xmlContent)));
                         }
+                        else if (rpcParam.SqlDbType == SqlDbType.Structured)
+                        {
+                            if (!this.userTypeColumnDefinitions.TryGetValue((int)rpcParam.UserTypeId, out var userTypeColumns))
+                            {
+                                userTypeColumns = new List<UserTypeColumn>();
+
+                                using (var cmd = new SqlCommand(@"
+                                select [Name]=c.[name], [Type]=type_name(c.system_type_id), [Length]=c.max_length
+                                from sys.table_types tt
+                                join sys.columns c on c.object_id = tt.type_table_object_id
+                                where tt.user_type_id = @userTypeId
+                                order by c.column_id", con))
+                                {
+                                    cmd.Parameters.Add(new SqlParameter("@userTypeId", SqlDbType.Int) { Value = (int)rpcParam.UserTypeId });
+                                    using (var reader = cmd.ExecuteReader())
+                                    {
+                                        while (reader.Read())
+                                        {
+                                            var name = reader.GetString(0);
+                                            var rawSqlDbType = reader.GetString(1);
+                                            var size = (int)reader.GetInt16(2);
+                                            var sqlDbType = GetSqlDbType(rawSqlDbType);
+                                            userTypeColumns.Add(new UserTypeColumn
+                                            {
+                                                Name = name,
+                                                SqlDbType = sqlDbType,
+                                                Size = size
+                                            });
+                                        }
+                                    }
+                                }
+                                this.userTypeColumnDefinitions.Add((int)rpcParam.UserTypeId, userTypeColumns);
+                            }
+
+                            var tvpValue = new UserType { Columns = userTypeColumns };                               
+                            var index = 0;
+                            while (index >= 0)
+                            {
+                                index = rpc.Statement.IndexOf($"insert into {value} values", index, StringComparison.CurrentCulture);
+                                if (index < 0)
+                                {
+                                    break;
+                                }
+                                //This works so long as one of the values doesn't have a right parethesis without a preceding left parenthesis
+                                var insertedValuesString = rpc.Statement.Substring(index).GetParenthesesContent();
+                                //split string by commas that have an even number of single quotes following them to avoid splitting on commas in values                            
+                                var insertValues = Regex.Split(insertedValuesString, ",(?=(?:[^']*'[^']*')*[^']*$)");
+
+                                var row = new List<object>();
+                                for (var i = 0; i < tvpValue.Columns.Count; i++)
+                                {
+                                    if (insertValues[i] == "NULL")
+                                    {
+                                        row.Add(DBNull.Value);
+                                    }
+                                    else if (insertValues[i].Contains('\''))
+                                    {
+                                        row.Add(GetSystemValueFromSqlString(insertValues[i], tvpValue.Columns[i].SqlDbType));
+                                    }
+                                    else
+                                    {
+                                        row.Add(GetSystemValue(insertValues[i], tvpValue.Columns[i].SqlDbType));
+                                    }
+                                }
+                                tvpValue.Rows.Add(row);
+                                index++;
+                            }
+                            rpcParam.Value = tvpValue;
+                        }
                         else
                         {
-                            throw new Exception(rpcParam.DbType + " is not a supported SqlDbType for a non-output parameter whose value is set with a variable");
+                            throw new Exception(rpcParam.SqlDbType + " is not a supported SqlDbType for a non-output parameter whose value is set with a variable");
                         }
                     }
                 }
@@ -365,6 +356,91 @@
                     rpcParam.Value = DBNull.Value;
                 }
                 rpc.Parameters.Add(rpcParam);
+            }
+        }
+
+        private SqlDbType GetSqlDbType(string rawSqlDbType)
+        {
+            SqlDbType sqlDbType;
+            if (rawSqlDbType == "sysname")
+            {
+                sqlDbType = SqlDbType.NVarChar;
+            }
+            else if (rawSqlDbType == "numeric")
+            {
+                sqlDbType = SqlDbType.Decimal;
+            }
+            else if (rawSqlDbType == "table type")
+            {
+                sqlDbType = SqlDbType.Structured;
+            }
+            else if (!Enum.TryParse(rawSqlDbType, true, out sqlDbType))
+            {
+                throw new Exception($"{rawSqlDbType} could not be parsed into a SqlDbType");
+            }
+            return sqlDbType;
+        }
+
+        private object GetSystemValueFromSqlString(string value, SqlDbType sqlDbType)
+        {
+            var start = value.IndexOf('\'') + 1;
+            var stringValue = value.Substring(start, value.Length - start - 1);
+            if (sqlDbType == SqlDbType.UniqueIdentifier)
+            {
+                return Guid.Parse(stringValue);
+            }
+            else
+            {
+                return stringValue;
+            }
+        }
+
+        private object GetSystemValue(string value, SqlDbType sqlDbType)
+        {
+            switch (sqlDbType)
+            {
+                case SqlDbType.BigInt:
+                    return long.Parse(value);
+                case SqlDbType.Bit:
+                    return Convert.ToBoolean(byte.Parse(value));
+                case SqlDbType.Char:
+                case SqlDbType.NChar:
+                case SqlDbType.VarChar:
+                case SqlDbType.NVarChar:
+                case SqlDbType.Text:
+                case SqlDbType.NText:
+                    return value;
+                case SqlDbType.Decimal:
+                case SqlDbType.Money:
+                case SqlDbType.SmallMoney:
+                    return decimal.Parse(value);
+                case SqlDbType.Float:
+                    return double.Parse(value);
+                case SqlDbType.Int:
+                    return decimal.ToInt32(decimal.Parse(value));
+                case SqlDbType.Real:
+                    return float.Parse(value);
+                case SqlDbType.UniqueIdentifier:
+                    return Guid.Parse(value);
+                case SqlDbType.SmallInt:
+                    return short.Parse(value);
+                case SqlDbType.TinyInt:
+                    return byte.Parse(value);
+                case SqlDbType.SmallDateTime:
+                case SqlDbType.DateTime:
+                case SqlDbType.Date:
+                case SqlDbType.Time:
+                case SqlDbType.DateTime2:
+                    return DateTime.Parse(value);
+                case SqlDbType.DateTimeOffset:
+                    return DateTimeOffset.Parse(value);
+                case SqlDbType.Binary:
+                case SqlDbType.Image:
+                case SqlDbType.Timestamp:
+                case SqlDbType.VarBinary:
+                    return Encoding.UTF8.GetBytes(value);
+                default:
+                    throw new Exception(sqlDbType + " is not a supported SqlDbType");
             }
         }
     }
