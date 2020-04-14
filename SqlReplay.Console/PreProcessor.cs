@@ -286,7 +286,7 @@
                                 select [Name]=c.[name], [Type]=type_name(c.system_type_id), [Length]=c.max_length
                                 from sys.table_types tt
                                 join sys.columns c on c.object_id = tt.type_table_object_id
-                                where tt.user_type_id = @userTypeId
+                                where tt.user_type_id = @userTypeId and c.is_identity = 0
                                 order by c.column_id", con))
                                 {
                                     cmd.Parameters.Add(new SqlParameter("@userTypeId", SqlDbType.Int) { Value = (int)rpcParam.UserTypeId });
@@ -327,7 +327,7 @@
                                 var row = new List<object>();
                                 for (var i = 0; i < tvpValue.Columns.Count; i++)
                                 {
-                                    if (insertValues[i] == "NULL")
+                                    if (insertValues[i] == "NULL" || insertValues[i] == "default")
                                     {
                                         row.Add(DBNull.Value);
                                     }
@@ -337,7 +337,7 @@
                                     }
                                     else
                                     {
-                                        row.Add(GetSystemValue(insertValues[i], tvpValue.Columns[i].SqlDbType));
+                                        row.Add(GetSystemValue(insertValues[i], tvpValue.Columns[i].SqlDbType));                                        
                                     }
                                 }
                                 tvpValue.Rows.Add(row);
@@ -400,9 +400,9 @@
             switch (sqlDbType)
             {
                 case SqlDbType.BigInt:
-                    return long.Parse(value);
+                    return decimal.ToInt64(decimal.Parse(value));
                 case SqlDbType.Bit:
-                    return Convert.ToBoolean(byte.Parse(value));
+                    return Convert.ToBoolean(decimal.ToByte(decimal.Parse(value)));
                 case SqlDbType.Char:
                 case SqlDbType.NChar:
                 case SqlDbType.VarChar:
@@ -423,9 +423,9 @@
                 case SqlDbType.UniqueIdentifier:
                     return Guid.Parse(value);
                 case SqlDbType.SmallInt:
-                    return short.Parse(value);
+                    return decimal.ToInt16(decimal.Parse(value));
                 case SqlDbType.TinyInt:
-                    return byte.Parse(value);
+                    return decimal.ToByte(decimal.Parse(value));
                 case SqlDbType.SmallDateTime:
                 case SqlDbType.DateTime:
                 case SqlDbType.Date:
