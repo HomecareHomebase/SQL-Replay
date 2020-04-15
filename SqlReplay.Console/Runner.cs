@@ -4,7 +4,7 @@
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using System.Linq;
-    using System.Data.SqlClient;
+    using System.Data;
 
     public class Runner
     {
@@ -28,6 +28,17 @@
             var allEvents = run.Sessions.SelectMany(s => s.Events)
                 //.Where(e => !matchCriteria.Any(mc => ((e as Rpc)?.ObjectName.Contains(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault())) //leave these out
                 .ToList();
+
+            ////Remove procedure name and parameters so proc calls with TVP variables will get executed as SQLBatch instead of RCP and get plan stored in cache
+            //foreach (var evt in allEvents)
+            //{
+            //    if (!(evt is Rpc rpc)) continue;
+            //    if (rpc.Parameters.Any(p => p.SqlDbType == SqlDbType.Structured))
+            //    {
+            //        rpc.Procedure = null;
+            //        rpc.Parameters.Clear();
+            //    }
+            //}
 
             var allDependentEvents = allEvents.Where(e => e.TransactionId != "0" && ((e is Rpc) || (e as Transaction)?.TransactionState != "Begin")).ToList();
             var allIndependentEvents = allEvents.Where(e => e.TransactionId == "0" || (e as Transaction)?.TransactionState == "Begin");
@@ -75,7 +86,7 @@
                         {
                             TransactionId = model.TransactionId,
                             TransactionState = "Commit",
-                            EventSequence = (int.Parse(model.EventSequence) + 1).ToString(),
+                            EventSequence = model.EventSequence + 1,
                             Timestamp = model.Timestamp.AddMilliseconds(100)
                         });
                     }

@@ -28,7 +28,7 @@ namespace SqlReplay.Console.CustomPreProcessing
             Parameter p = new Parameter
             {
                 Name = parameterInfo.parameterName,
-                DbType = (SqlDbType)Enum.Parse(typeof(SqlDbType), parameterInfo.parameterProperties["DBType"].ToString(), true),
+                SqlDbType = (SqlDbType)Enum.Parse(typeof(SqlDbType), parameterInfo.parameterProperties["DBType"].ToString(), true),
                 Size = int.Parse(parameterInfo.parameterProperties["Size"].ToString()),
                 Precision = byte.Parse(parameterInfo.parameterProperties["Precision"].ToString()),
                 Scale = byte.Parse(parameterInfo.parameterProperties["Scale"].ToString()),

@@ -37,9 +37,6 @@ namespace SqlReplay.Console.CustomPreProcessing
             // Create Session, with RPC Event
             GenerateSessions();
 
-            // Determine max string length of EventSequence to allow "numerical" OrderBy sorting below
-            int maxSequenceLength = sessions.Values.Max(x => x.Events[0].EventSequence.Length);
-
             /* If a future update to this custom implementation allows for multiple events per session,
                uncomment the block below to ensure the events are sorted numerically in ascending fashion.
             */
@@ -51,7 +48,7 @@ namespace SqlReplay.Console.CustomPreProcessing
 
             var run = new Run()
             {
-                Sessions = sessions.Values.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().EventSequence.PadLeft(maxSequenceLength, '0')).ToList()
+                Sessions = sessions.Values.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().EventSequence).ToList()
             };
 
             run.EventCaptureOrigin = run.Sessions.First().Events.First().Timestamp;
@@ -64,7 +61,7 @@ namespace SqlReplay.Console.CustomPreProcessing
             sessions = new ConcurrentDictionary<string, Session>();
             var timeStamp = startDateTime;
 
-            int sessionCount = 1;
+            long sessionCount = 1;
             while (sessionCount <= totalSessions)
             {
                 var session_id = sessionCount.ToString();
@@ -77,13 +74,13 @@ namespace SqlReplay.Console.CustomPreProcessing
             }
         }
 
-        private Event GetEvent(int sequence, DateTimeOffset timeStamp)
+        private Event GetEvent(long sequence, DateTimeOffset timeStamp)
         {
             Event evt = null;
 
             evt = new Rpc()
             {
-                EventSequence = sequence.ToString(),
+                EventSequence = sequence,
                 TransactionId = "0", // Always 0 for now
                 Procedure = storedProcedureName,
                 Statement = null,
