@@ -1,11 +1,13 @@
 ﻿namespace SqlReplay.Console
 {
+    using Newtonsoft.Json;
     using System;
     using System.Data;
 
-    [Serializable]
+    [Serializable, JsonObject(MemberSerialization.OptIn)]
     public class Parameter
     {
+        [JsonProperty("n")]
         public string Name { get; set; }
         public SqlDbType SqlDbType { get; set; }        
         public int Size { get; set; }
@@ -14,6 +16,7 @@
         public ParameterDirection Direction { get; set; }
         public string TypeName { get; set; }
         public int? UserTypeId { get; set; }
+        [JsonProperty("v")]
         public object Value { get; set; }
     }
 }

@@ -20,13 +20,14 @@
 
             //DuplicateEvents(run, 4); //synthetically increase load
 
-            //var matchCriteria = new List<string>()
+            //var storedProcedureNames = new string[]
             //{
-            //    "something I want to exclude"
+            //    "procedure I want to exclude, including schema"
             //};
+            //var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNames);
 
             var allEvents = run.Sessions.SelectMany(s => s.Events)
-                //.Where(e => !matchCriteria.Any(mc => ((e as Rpc)?.ObjectName.Contains(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault())) //leave these out
+                //.Where(e => !matchCriteria.Any(mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()))
                 .ToList();
 
             ////Remove procedure name and parameters so proc calls with TVP variables will get executed as SQLBatch instead of RCP and get plan stored in cache
@@ -133,17 +134,18 @@
 
         private void DuplicateEvents(Run run, byte factor)
         {
-            var matchCriteria = new List<string>()
+            var storedProcedureNames = new string[]
             {
-                "something I want to duplicate"
+                "procedure I want to duplicate, including schema"
             };
+            var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNames);            
             foreach (var session in run.Sessions)
             {
                 var duplicates = new List<Rpc>();
                 foreach (var evt in session.Events)
                 {
                     if (!(evt is Rpc rpc)) continue;
-                    if (!matchCriteria.Any(mc => rpc.ObjectName.ToLower().Contains(mc, StringComparison.CurrentCultureIgnoreCase))) continue;
+                    if (!matchCriteria.Any(mc => (rpc.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault())) continue;
                     for (byte i = 0; i < factor - 1; i++)
                     {
                         var duplicate = new Rpc
