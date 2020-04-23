@@ -6,6 +6,8 @@
     using System.Collections.Generic;
     using System;
     using SqlReplay.Console.CustomPreProcessing;
+    using System.Linq;
+    using Newtonsoft.Json;
 
     internal class Program
     {
@@ -13,14 +15,15 @@
         {
             string command = args[0];
 
-            string outputPath;
+            string inputDirectory;
+            string outputDirectory;
             short clients;
 
             switch (command)
             {
                 case "prep":
-                    string inputPath = args[1];
-                    outputPath = args[2];
+                    inputDirectory = args[1];
+                    outputDirectory = args[2];
                     clients = short.Parse(args[3]);
                     string connectionString = args[4];
 
@@ -30,11 +33,11 @@
                         cutoff = DateTimeOffset.Parse(args[5]);
                     }
 
-                    await Prep(Directory.GetFiles(inputPath), outputPath, clients, connectionString, cutoff);
+                    await Prep(Directory.GetFiles(inputDirectory), outputDirectory, clients, connectionString, cutoff);
                     break;
 
                 case "prepnosc":
-                    outputPath = args[1];
+                    outputDirectory = args[1];
                     clients = short.Parse(args[2]);
                     int numSessions = int.Parse(args[3]);
                     DateTime start = DateTime.Parse(args[4]);
@@ -47,8 +50,7 @@
                         runTimeHours = (int?)int.Parse(args[7]);
                     }
 
-
-                    await PrepNewOrSignatureChange(outputPath, clients, numSessions, start, spName, jsonParmPath, runTimeHours);
+                    await PrepNewOrSignatureChange(outputDirectory, clients, numSessions, start, spName, jsonParmPath, runTimeHours);
                     break;
 
                 case "run":
@@ -61,28 +63,34 @@
 
                     await Run(filePath, cs);
                     break;
+                case "output":
+                    inputDirectory = args[1];
+                    string outputFilePath = args[2];
+                    string storedProcedureNames = args[3];
+                    await Output(Directory.GetFiles(inputDirectory), outputFilePath, storedProcedureNames.Split(','));
+                    break;
                 default:
                     break;
             }
         }
 
-        internal static async Task Prep(string[] fileNames, string outputPath, int clients, string connectionString, DateTimeOffset? cutoff)
+        internal static async Task Prep(string[] filePaths, string outputDirectory, int clients, string connectionString, DateTimeOffset? cutoff)
         {
             var preProcessor = new PreProcessor();
-            Run run = await preProcessor.PreProcess(fileNames, connectionString, cutoff);
+            Run run = await preProcessor.PreProcess(filePaths, connectionString, cutoff);
 
-            await ProcessPrep(run, outputPath, clients, connectionString);
+            await ProcessPrep(run, outputDirectory, clients, connectionString);
         }
 
-        internal static async Task PrepNewOrSignatureChange(string outputPath, int clients, int numberOfSessions, DateTime startDateTime, string storedProcedureName, string jsonParmPath, int? runTimeInHours)
+        internal static async Task PrepNewOrSignatureChange(string outputDirectory, int clients, int numberOfSessions, DateTime startDateTime, string storedProcedureName, string jsonParmPath, int? runTimeInHours)
         {
             var preProcessor = new CustomPreProcessor(numberOfSessions, startDateTime, storedProcedureName, jsonParmPath, runTimeInHours);
             Run run = preProcessor.GenerateRun();
 
-            await ProcessPrep(run, outputPath, clients, null);
+            await ProcessPrep(run, outputDirectory, clients, null);
         }
 
-        internal static async Task ProcessPrep(Run run, string outputPath, int clients, string connectionString)
+        internal static async Task ProcessPrep(Run run, string outputDirectory, int clients, string connectionString)
         {
             Run[] runs = new Run[clients];
             for (var i = 0; i < clients; ++i)
@@ -102,19 +110,14 @@
                 using (var stream = new MemoryStream())
                 {
                     formatter.Serialize(stream, runs[i]);
-                    await File.WriteAllBytesAsync($@"{outputPath}\replay{i}.txt", stream.ToArray());
+                    await File.WriteAllBytesAsync($@"{outputDirectory}\replay{i}.txt", stream.ToArray());
                 }
             }
         }
 
         internal static async Task Run(string filePath, string connectionString = null)
         {
-            Run run;
-            var formatter = new BinaryFormatter();
-            using (var stream = new MemoryStream(await File.ReadAllBytesAsync(filePath)))
-            {
-                run = (Run)formatter.Deserialize(stream);
-            }
+            Run run = await DeserializeRun(filePath);            
             if (connectionString != null)
             {
                 run.ConnectionString = connectionString;
@@ -132,6 +135,31 @@
                     await writer.WriteLineAsync(ex.ToString());
                 }
             }
+        }
+
+        internal static async Task Output(string[] filePaths, string outputFilePath, string[] storedProcedureNames)
+        {
+            var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNames);
+            List<Event> events = new List<Event>();
+            foreach (var filePath in filePaths)
+            {
+                Run run = await DeserializeRun(filePath);
+                events.AddRange(run.Sessions.SelectMany(s => s.Events)
+                    .Where(e => matchCriteria.Any(
+                        mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault())).ToArray());
+            }
+            await File.WriteAllTextAsync(outputFilePath, JsonConvert.SerializeObject(events.OrderBy(e => e.EventSequence)));
+        }
+
+        private static async Task<Run> DeserializeRun(string filePath)
+        {
+            Run run;
+            var formatter = new BinaryFormatter();
+            using (var stream = new MemoryStream(await File.ReadAllBytesAsync(filePath)))
+            {
+                run = (Run)formatter.Deserialize(stream);
+            }
+            return run;
         }
     }
 }

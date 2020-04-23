@@ -17,16 +17,16 @@
         private Dictionary<string, Dictionary<string, Parameter>> procedureParameters = new Dictionary<string, Dictionary<string, Parameter>>();
         private Dictionary<int, List<UserTypeColumn>> userTypeColumnDefinitions = new Dictionary<int, List<UserTypeColumn>>();
 
-        internal async Task<Run> PreProcess(string[] fileNames, string connectionString, DateTimeOffset? cutoff)
+        internal async Task<Run> PreProcess(string[] filePaths, string connectionString, DateTimeOffset? cutoff)
         {
             var sessions = new ConcurrentDictionary<string, Session>();
 
             using (var con = new SqlConnection(connectionString))
             {
                 await con.OpenAsync();
-                foreach (string fileName in fileNames)
+                foreach (string filePath in filePaths)
                 {                    
-                    var xeStream = new XEFileEventStreamer(fileName);
+                    var xeStream = new XEFileEventStreamer(filePath);
                     await xeStream.ReadEventStream(xevent =>
                     {
                         if (xevent.Actions["database_name"].ToString() != con.Database)
