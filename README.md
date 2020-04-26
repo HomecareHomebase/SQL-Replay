@@ -19,7 +19,7 @@ The SQL Replay tool executes binary data derived from Extended Events captures. 
 In order to prep Extended Events capture files, simply execute the SQL Replay tool from the command-line using the prep parameter.
 
 ```
-SqlReplay.Console.exe prep "C:\capture\" "C:\capture\output\" 10 "Server=MYSERVER;Database=MYDATABASE;User Id=user;Password=password;Max Pool Size=1000;Connection Timeout=60;" "12/9/2019 3:30:00 PM +00:00"
+SqlReplay.Console.exe prep C:\capture C:\capture\output 10 "Server=MYSERVER;Database=MYDATABASE;User Id=user;Password=password;Max Pool Size=1000;Connection Timeout=60;" "12/9/2019 3:30:00 PM +00:00"
 ```
 
 The first folder path is the location of the Extended Events capture files you wish to process.
