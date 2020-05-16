@@ -11,6 +11,7 @@
     using System.Data;
     using System.Data.SqlClient;
     using System.Text;
+    using System.IO;
 
     internal class PreProcessor
     {
@@ -25,7 +26,12 @@
             {
                 await con.OpenAsync();
                 foreach (string filePath in filePaths)
-                {                    
+                {
+                    if (!Regex.IsMatch(Path.GetFileName(filePath), @"^\w+\.xel$", RegexOptions.IgnoreCase))
+                    {
+                        //ignore any files that don't fit the pattern of an XE file
+                        continue;
+                    }
                     var xeStream = new XEFileEventStreamer(filePath);
                     await xeStream.ReadEventStream(xevent =>
                     {

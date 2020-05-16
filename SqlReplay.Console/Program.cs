@@ -1,4 +1,6 @@
-﻿namespace SqlReplay.Console
+﻿using System.Text.RegularExpressions;
+
+namespace SqlReplay.Console
 {
     using System.Threading.Tasks;
     using System.IO;
@@ -142,7 +144,12 @@
             var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNames);
             List<Event> events = new List<Event>();
             foreach (var filePath in filePaths)
-            {
+            {                
+                if (!Regex.IsMatch(Path.GetFileName(filePath), @"^replay\d+\.txt$", RegexOptions.IgnoreCase))
+                {
+                    //ignore any files that don't fit the pattern of replay files outputted from prep or prepnosc
+                    continue;
+                }
                 Run run = await DeserializeRun(filePath);
                 events.AddRange(run.Sessions.SelectMany(s => s.Events)
                     .Where(e => matchCriteria.Any(
