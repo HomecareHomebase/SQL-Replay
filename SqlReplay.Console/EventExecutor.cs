@@ -245,58 +245,62 @@
                     Scale = param.Scale,
                     Direction = param.Direction
                 };
-                if (param.SqlDbType == SqlDbType.Structured && param.Value != DBNull.Value)
+                if (param.SqlDbType == SqlDbType.Structured)
                 {
-                    var userType = (UserType)param.Value;
-                    if (userType.Rows.Count > 0)
+                    if (param.Value != DBNull.Value)
                     {
-                        var sqlMetaData = new SqlMetaData[userType.Columns.Count];
-                        for (var i = 0; i < userType.Columns.Count; i++)
+                        var userType = (UserType) param.Value;
+                        if (userType.Rows.Count > 0)
                         {
-                            var col = userType.Columns[i];
-                            switch (col.SqlDbType)
+                            var sqlMetaData = new SqlMetaData[userType.Columns.Count];
+                            for (var i = 0; i < userType.Columns.Count; i++)
                             {
-                                case SqlDbType.Char:                                                                
-                                case SqlDbType.NChar:
-                                case SqlDbType.NVarChar:
-                                case SqlDbType.VarChar:                                    
-                                    sqlMetaData[i] = new SqlMetaData(col.Name, col.SqlDbType, col.Size);
-                                    break;
-                                default:
-                                    sqlMetaData[i] = new SqlMetaData(col.Name, col.SqlDbType);
-                                    break;
-                            }
-                        }
-
-                        var tvpValue = new List<SqlDataRecord>();
-                        foreach (var row in userType.Rows)
-                        {
-                            var sqlDataRecord = new SqlDataRecord(sqlMetaData);
-                            for (var i = 0; i < sqlMetaData.Length; i++)
-                            {
-                                switch (sqlMetaData[i].SqlDbType)
+                                var col = userType.Columns[i];
+                                switch (col.SqlDbType)
                                 {
-                                    case SqlDbType.SmallDateTime:
-                                    case SqlDbType.DateTime:
-                                    case SqlDbType.Date:
-                                    case SqlDbType.Time:
-                                    case SqlDbType.DateTime2:
-                                        DateTime.TryParse(row[i].ToString(), out var dateTime);
-                                        sqlDataRecord.SetValue(i, dateTime);
-                                        break;
-                                    case SqlDbType.DateTimeOffset:
-                                        DateTimeOffset.TryParse(row[i].ToString(), out var dateTimeOffset);
-                                        sqlDataRecord.SetValue(i, dateTimeOffset);
+                                    case SqlDbType.Char:
+                                    case SqlDbType.NChar:
+                                    case SqlDbType.NVarChar:
+                                    case SqlDbType.VarChar:
+                                        sqlMetaData[i] = new SqlMetaData(col.Name, col.SqlDbType, col.Size);
                                         break;
                                     default:
-                                        sqlDataRecord.SetValue(i, row[i]);
+                                        sqlMetaData[i] = new SqlMetaData(col.Name, col.SqlDbType);
                                         break;
                                 }
                             }
-                            tvpValue.Add(sqlDataRecord);
+
+                            var tvpValue = new List<SqlDataRecord>();
+                            foreach (var row in userType.Rows)
+                            {
+                                var sqlDataRecord = new SqlDataRecord(sqlMetaData);
+                                for (var i = 0; i < sqlMetaData.Length; i++)
+                                {
+                                    switch (sqlMetaData[i].SqlDbType)
+                                    {
+                                        case SqlDbType.SmallDateTime:
+                                        case SqlDbType.DateTime:
+                                        case SqlDbType.Date:
+                                        case SqlDbType.Time:
+                                        case SqlDbType.DateTime2:
+                                            DateTime.TryParse(row[i].ToString(), out var dateTime);
+                                            sqlDataRecord.SetValue(i, dateTime);
+                                            break;
+                                        case SqlDbType.DateTimeOffset:
+                                            DateTimeOffset.TryParse(row[i].ToString(), out var dateTimeOffset);
+                                            sqlDataRecord.SetValue(i, dateTimeOffset);
+                                            break;
+                                        default:
+                                            sqlDataRecord.SetValue(i, row[i]);
+                                            break;
+                                    }
+                                }
+
+                                tvpValue.Add(sqlDataRecord);
+                            }
+                            sqlParam.Value = tvpValue;
                         }
-                        sqlParam.Value = tvpValue;
-                    }                    
+                    }
                     sqlParam.TypeName = param.TypeName;
                 }
                 else
