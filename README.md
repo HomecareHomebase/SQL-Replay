@@ -6,7 +6,7 @@ The SQL Repay tool was created since SQL Server's Replay feature is based on SQL
 
 Other key features of the SQL Replay tool:
 - We don't want to replay events in a serial, synchronous manner. We want to simulate events firing concurrently at the same points in time as they took place in the event capture.
-- We want to support bulk inserts. SQL Server Extended Events do not include the actual data bulk inserted, so the SQL Replay tool creates fake data based on column definitions to allow for simulating bulk inserts.
+- We want to support bulk inserts. SQL Server Extended Events do not include the actual data bulk inserted, so the SQL Replay tool queries rows from the database during test prep to use to simulate captured bulk inserts.
 - We want to replay stored procedure calls as remote procedure calls (RPC) rather than just replay the captured SQL statement representing the call as a SQL batch, which is important for preventing additional compilations and significantly inflating the number of compilations/sec.
 - We want to facilitate synthetic generation of events for new stored procedures or existing stored procedures with parameter signature changes.
 
