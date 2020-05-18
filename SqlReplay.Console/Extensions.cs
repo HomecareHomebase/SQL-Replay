@@ -30,18 +30,6 @@
                 }
             }
             throw new Exception("Text does not have matching parentheses.");
-        }
-
-        public static string Lengthen(this string text, int characters)
-        {
-            int length = 0;
-            var builder = new StringBuilder();
-            while (length < characters)
-            {
-                builder.Append(text);
-                length += text.Length;
-            }
-            return builder.ToString().Substring(0, characters);
-        }        
+        }   
     }
 }

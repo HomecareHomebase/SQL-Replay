@@ -10,17 +10,30 @@
     {
         public List<Exception> Exceptions { get; set; } = new List<Exception>();
 
-        public Task Warmup(Run run, string[] storedProcedureNamesToInclude, int durationInMinutes)
+        public Task Warmup(Run run, int durationInMinutes, string[] storedProcedureNamesToInclude)
         {
             var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToInclude);
 
             List<Event> allEvents;
-            if (matchCriteria.Any() && durationInMinutes > 0)
+            if (matchCriteria.Any())                
             {
-                allEvents = run.Sessions.SelectMany(s => s.Events)
-                    .Where(e => matchCriteria.Any(mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()) &&
-                                e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
-                    .ToList();
+                if (durationInMinutes > 0)
+                {
+                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                        .Where(e => matchCriteria.Any(mc =>
+                                        ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
+                                        .GetValueOrDefault()) &&
+                                    e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
+                        .ToList();
+                }
+                else
+                {
+                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                        .Where(e => matchCriteria.Any(mc =>
+                                        ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
+                                        .GetValueOrDefault()))
+                        .ToList();
+                }
             }
             else
             {
@@ -29,21 +42,44 @@
             return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
         }
 
-        public Task Run(Run run, string[] storedProcedureNamesToExclude)
+        public Task Run(Run run, int durationInMinutes, string[] storedProcedureNamesToExclude)
         {           
             var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToExclude);
 
             List<Event> allEvents;
             if (matchCriteria.Any())
             {
-                allEvents = run.Sessions.SelectMany(s => s.Events)
-                    .Where(e => !matchCriteria.Any(mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()))
-                    .ToList();
+                if (durationInMinutes > 0)
+                {
+                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                        .Where(e => !matchCriteria.Any(mc =>
+                            ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
+                            .GetValueOrDefault()) &&
+                                    e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
+                        .ToList();
+                }
+                else
+                {
+                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                        .Where(e => !matchCriteria.Any(mc =>
+                            ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
+                            .GetValueOrDefault()))
+                        .ToList();
+                }
             }
             else
             {
-                allEvents = run.Sessions.SelectMany(s => s.Events)
-                    .ToList();
+                if (durationInMinutes > 0)
+                {
+                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                        .Where(e => e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
+                        .ToList();
+                }
+                else
+                {
+                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                        .ToList();
+                }                
             }
             return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
         }
@@ -103,7 +139,7 @@
                             TransactionId = model.TransactionId,
                             TransactionState = "Commit",
                             EventSequence = model.EventSequence + 1,
-                            Timestamp = model.Timestamp.AddMilliseconds(100)
+                            Timestamp = model.Timestamp.AddMilliseconds(1)
                         });
                     }
                 }
@@ -111,8 +147,8 @@
                 buckets.Add(group.Key, bucket);              
             }
 
-            var bucketEvents = buckets.SelectMany(b => b.Value.Select(e => e));
-            var orphanEvents = allEvents.Except(bucketEvents);            
+            var bucketDependentEvents = buckets.SelectMany(b => b.Value.Where(i => i is Transaction).SelectMany(i => (i as Transaction)?.Events));
+            var orphanEvents = allDependentEvents.Except(bucketDependentEvents);
             foreach (var evt in orphanEvents)
             {
                 string key = evt.Timestamp.ToString("ddhhmm") + evt.Timestamp.Second / 15;
@@ -125,7 +161,8 @@
                     buckets.Add(key, new List<Event> { evt });
                 }
             }
-            var orderedBuckets = buckets.OrderBy(b => b.Key).Select(b => b.Value.OrderBy(e => e.Timestamp).ToList()).ToList();          
+
+            var orderedBuckets = buckets.OrderBy(b => b.Key).Select(b => b.Value.OrderBy(e => e.Timestamp).ToList()).ToList();
 
             Console.WriteLine("Kicking off executions...");
 

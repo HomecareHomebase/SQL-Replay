@@ -1,6 +1,4 @@
-﻿using System.ComponentModel;
-
-namespace SqlReplay.Console
+﻿namespace SqlReplay.Console
 {
     using Microsoft.SqlServer.XEvent.XELite;
     using System.Threading.Tasks;
@@ -95,7 +93,11 @@ namespace SqlReplay.Console
                                     .GetParenthesesContent(bulkInsert.BatchText.IndexOf(" with (") + 6).Split(", ");
                                 foreach (string setting in settings)
                                 {
-                                    if (setting == "FIRE_TRIGGERS")
+                                    if (setting == "CHECK_CONSTRAINTS")
+                                    {
+                                        bulkInsert.CheckConstraints = true;
+                                    }
+                                    else if (setting == "FIRE_TRIGGERS")
                                     {
                                         bulkInsert.FireTriggers = true;
                                         break;
@@ -113,18 +115,15 @@ namespace SqlReplay.Console
                                 throw new Exception(
                                     $"Could not find session ID {xevent.Actions["session_id"].ToString()} for bulk insert.");
                             }
-                            else
-                            {                                
-                                var bulkInsert = (BulkInsert) session.Events
-                                    .FirstOrDefault(e =>
-                                        (e as BulkInsert)?.TransactionId ==
-                                        xevent.Actions["transaction_id"].ToString() &&
-                                        (e as BulkInsert)?.BatchText == xevent.Fields["batch_text"].ToString());
-                                if (bulkInsert != null)
-                                {
-                                    bulkInsert.RowCount = int.Parse(xevent.Fields["row_count"].ToString());
-                                    AddBulkInsertData(bulkInsert, con);
-                                }                                
+                            var bulkInsert = (BulkInsert) session.Events
+                                .FirstOrDefault(e =>
+                                    (e as BulkInsert)?.TransactionId ==
+                                    xevent.Actions["transaction_id"].ToString() &&
+                                    (e as BulkInsert)?.BatchText == xevent.Fields["batch_text"].ToString());
+                            if (bulkInsert != null)
+                            {
+                                bulkInsert.RowCount = int.Parse(xevent.Fields["row_count"].ToString());
+                                AddBulkInsertData(bulkInsert, con);
                             }
                         }
 
@@ -133,8 +132,7 @@ namespace SqlReplay.Console
                             string sessionId = xevent.Actions["session_id"].ToString();
                             Session session = sessions.GetOrAdd(sessionId, new Session() {SessionId = sessionId});
                             session.Events.Add(evt);                            
-                        }
-
+                        }                        
                         return Task.CompletedTask;
                     }, CancellationToken.None);
                 }
@@ -142,12 +140,14 @@ namespace SqlReplay.Console
 
             foreach (Session session in sessions.Values)
             {
+                //Remove any bulk inserts where we never found a corresponding sql_batch_completed
+                session.Events.RemoveAll(e => (e as BulkInsert)?.RowCount == 0);
                 session.Events = session.Events.OrderBy(e => e.EventSequence).ToList();
             }
 
             var run = new Run()
             {                
-                Sessions = sessions.Values.ToArray().Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().EventSequence).ToList()
+                Sessions = sessions.Values.ToArray().Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().Timestamp).ToList()
             };
             run.EventCaptureOrigin = run.Sessions.First().Events.First().Timestamp;
             return run;

@@ -38,17 +38,17 @@ namespace SqlReplay.Console.CustomPreProcessing
             GenerateSessions();
 
             /* If a future update to this custom implementation allows for multiple events per session,
-               uncomment the block below to ensure the events are sorted numerically in ascending fashion.
+               uncomment the block below to ensure the events are sorted by EventSequence.
             */
 
             //foreach (Session session in sessions.Values)
             //{
-            //    session.Events = session.Events.OrderBy(e => e.EventSequence.PadLeft(maxSequenceLength, '0')).ToList();
+            //    session.Events = session.Events.OrderBy(e => e.EventSequence).ToList();
             //}
 
             var run = new Run()
             {
-                Sessions = sessions.Values.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().EventSequence).ToList()
+                Sessions = sessions.Values.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().Timestamp).ToList()
             };
 
             run.EventCaptureOrigin = run.Sessions.First().Events.First().Timestamp;

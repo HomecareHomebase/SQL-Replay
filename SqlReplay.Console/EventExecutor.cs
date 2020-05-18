@@ -29,13 +29,12 @@
                     {
                         if (trx.TransactionState == "Begin")
                         {
-                            var con = await GetOpenSqlConnection(connectionString);
+                            var con = await GetOpenSqlConnectionAsync(connectionString);
                             if (con == null) { return; }
                             try
                             {
                                 using (SqlTransaction dbTrx = con.BeginTransaction())
                                 {
-
                                     foreach (var trxEvt in trx.Events)
                                     {
                                         TimeSpan timeToDelayTrxEvent = trxEvt.Timestamp.Subtract(eventCaptureOrigin).Subtract(DateTimeOffset.UtcNow.Subtract(replayOrigin));
@@ -131,7 +130,7 @@
                     }
                     else if (evt is Rpc rpc)
                     {
-                        using (var con = await GetOpenSqlConnection(connectionString))
+                        using (var con = await GetOpenSqlConnectionAsync(connectionString))
                         {
                             if (con == null) { return; }
                             string commandText;
@@ -167,6 +166,7 @@
                     }
                     else if (evt is BulkInsert bulk)
                     {
+                        if (bulk.Rows.Count == 0) { return; }
                         var dataTable = new DataTable();
                         foreach (var column in bulk.Columns)
                         {
@@ -183,13 +183,29 @@
                             dataTable.Rows.Add(dataRow);
                         }
 
-                        using (var con = await GetOpenSqlConnection(connectionString))
+                        using (var con = await GetOpenSqlConnectionAsync(connectionString))
                         {
                             if (con == null) { return; }
-                            var options = (bulk.FireTriggers) ? SqlBulkCopyOptions.FireTriggers : SqlBulkCopyOptions.Default;
+                            SqlBulkCopyOptions options;
+                            if (bulk.CheckConstraints && bulk.FireTriggers)
+                            {
+                                options = SqlBulkCopyOptions.CheckConstraints | SqlBulkCopyOptions.FireTriggers;
+                            }
+                            else if (bulk.CheckConstraints)
+                            {
+                                options = SqlBulkCopyOptions.CheckConstraints;
+                            }
+                            else if (bulk.FireTriggers)
+                            {
+                                options = SqlBulkCopyOptions.FireTriggers;
+                            }
+                            else
+                            {
+                                options = SqlBulkCopyOptions.Default;
+                            }
                             try
                             {
-                                using (var bulkCopy = new SqlBulkCopy(con, options, null) { BulkCopyTimeout = 30 })
+                                using (var bulkCopy = new SqlBulkCopy(con, options, null) { BulkCopyTimeout = 1800 })
                                 {
                                     bulkCopy.DestinationTableName = bulk.Table;
                                     foreach (DataColumn column in dataTable.Columns)
@@ -199,7 +215,6 @@
 
                                     await bulkCopy.WriteToServerAsync(dataTable);
                                 }
-
                             }
                             catch (Exception ex)
                             {
@@ -214,7 +229,7 @@
             Console.WriteLine("Ending bucket: " + events.First().Timestamp);
         }
 
-        private async Task<SqlConnection> GetOpenSqlConnection(string connectionString)
+        private async Task<SqlConnection> GetOpenSqlConnectionAsync(string connectionString)
         {
             var con = new SqlConnection(connectionString);
             try
@@ -227,9 +242,9 @@
                 {
                     await con.OpenAsync();
                 }
-                catch(Exception ex)
+                catch(Exception)
                 {
-                    this.Exceptions.Add(ex);
+                    //Don't log failed connection attempts as these just muddy the exception logs
                     con.Dispose();
                     return null;
                 }
@@ -335,7 +350,7 @@
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(int) };
             }
-            else if (column.SqlDbType.ToString() == "Text" || column.SqlDbType.ToString().Contains("Char"))
+            else if (column.SqlDbType.ToString().Contains("Text") || column.SqlDbType.ToString().Contains("Char"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
             }                    

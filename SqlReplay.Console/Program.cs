@@ -7,7 +7,7 @@ namespace SqlReplay.Console
     using System.Runtime.Serialization.Formatters.Binary;
     using System.Collections.Generic;
     using System;
-    using SqlReplay.Console.CustomPreProcessing;
+    using CustomPreProcessing;
     using System.Linq;
     using Newtonsoft.Json;
 
@@ -21,6 +21,7 @@ namespace SqlReplay.Console
             string outputDirectory;
             short clients;
             string filePath;
+            int durationInMinutes;
             string storedProcedureNames;
             string cs;
 
@@ -52,34 +53,33 @@ namespace SqlReplay.Console
                     break;
                 case "warmup":
                     filePath = args[1];
-                    storedProcedureNames = args[2];
-                    int.TryParse(args[3], out var durationInMinutes);
+                    int.TryParse(args[2], out durationInMinutes);
+                    storedProcedureNames = args[3];                    
                     cs = null;
                     if (args.Length > 4)
                     {
                         cs = args[4];
                     }
 
-                    await Warmup(filePath, storedProcedureNames.Split(','), durationInMinutes, cs);
+                    await Warmup(filePath, durationInMinutes, storedProcedureNames.Split(','), cs);
                     break;
                 case "run":
                     filePath = args[1];
-                    storedProcedureNames = args[2];
+                    int.TryParse(args[2], out durationInMinutes);
+                    storedProcedureNames = args[3];
                     cs = null;
-                    if (args.Length > 3)
+                    if (args.Length > 4)
                     {
-                        cs = args[3];
+                        cs = args[4];
                     }
 
-                    await Run(filePath, storedProcedureNames.Split(','), cs);
+                    await Run(filePath, durationInMinutes, storedProcedureNames.Split(','), cs);
                     break;
                 case "output":
                     inputDirectory = args[1];
                     string outputFilePath = args[2];
                     storedProcedureNames = args[3];
                     await Output(Directory.GetFiles(inputDirectory), outputFilePath, storedProcedureNames.Split(','));
-                    break;
-                default:
                     break;
             }
         }
@@ -125,7 +125,7 @@ namespace SqlReplay.Console
             }
         }
 
-        internal static async Task Warmup(string filePath, string[] storedProcedureNamesToInclude, int durationInMinutes, string connectionString = null)
+        internal static async Task Warmup(string filePath, int durationInMinutes, string[] storedProcedureNamesToInclude, string connectionString = null)
         {
             Run run = await DeserializeRun(filePath);
             if (connectionString != null)
@@ -134,7 +134,7 @@ namespace SqlReplay.Console
             }
 
             var runner = new Runner();
-            await runner.Warmup(run, storedProcedureNamesToInclude, durationInMinutes);
+            await runner.Warmup(run, durationInMinutes, storedProcedureNamesToInclude);
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
             string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
             using (StreamWriter writer = new StreamWriter(logFilePath, false))
@@ -147,7 +147,7 @@ namespace SqlReplay.Console
             }
         }
 
-        internal static async Task Run(string filePath, string[] storedProcedureNamesToExclude, string connectionString = null)
+        internal static async Task Run(string filePath, int durationInMinutes, string[] storedProcedureNamesToExclude, string connectionString = null)
         {
             Run run = await DeserializeRun(filePath);            
             if (connectionString != null)
@@ -156,7 +156,7 @@ namespace SqlReplay.Console
             }
 
             var runner = new Runner();
-            await runner.Run(run, storedProcedureNamesToExclude);
+            await runner.Run(run, durationInMinutes, storedProcedureNamesToExclude);
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
             string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
             using (StreamWriter writer = new StreamWriter(logFilePath, false))

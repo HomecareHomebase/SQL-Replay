@@ -11,7 +11,9 @@
         public List<Column> Columns { get; set; } = new List<Column>();
 
         public List<List<object>> Rows { get; set; } = new List<List<object>>();
-       
+
+        public bool CheckConstraints { get; set; }
+
         public bool FireTriggers { get; set; }
 
         [NonSerialized] private string _batchText;
