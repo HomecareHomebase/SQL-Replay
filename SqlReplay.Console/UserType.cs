@@ -6,7 +6,7 @@
     [Serializable]
     public class UserType
     {
-        public List<UserTypeColumn> Columns { get; set; } = new List<UserTypeColumn>();
+        public List<Column> Columns { get; set; } = new List<Column>();
         public List<List<object>> Rows { get; set; } = new List<List<object>>();
     }
 }

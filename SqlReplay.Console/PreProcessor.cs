@@ -1,4 +1,6 @@
-﻿namespace SqlReplay.Console
+﻿using System.ComponentModel;
+
+namespace SqlReplay.Console
 {
     using Microsoft.SqlServer.XEvent.XELite;
     using System.Threading.Tasks;
@@ -16,7 +18,7 @@
     internal class PreProcessor
     {
         private Dictionary<string, Dictionary<string, Parameter>> procedureParameters = new Dictionary<string, Dictionary<string, Parameter>>();
-        private Dictionary<int, List<UserTypeColumn>> userTypeColumnDefinitions = new Dictionary<int, List<UserTypeColumn>>();
+        private Dictionary<int, List<Column>> userTypeColumnDefinitions = new Dictionary<int, List<Column>>();
 
         internal async Task<Run> PreProcess(string[] filePaths, string connectionString, DateTimeOffset? cutoff)
         {
@@ -90,7 +92,7 @@
                             foreach (string col in columns)
                             {
                                 string[] columnInfo = col.Split(' ');
-                                bulkInsert.Columns.Add(new Column {Name = columnInfo[0], DataType = columnInfo[1]});
+                                bulkInsert.Columns.Add(new Column {Name = columnInfo[0], SqlDbType = GetSqlDbType(columnInfo[1])});
                             }
 
                             if (bulkInsert.BatchText.Contains(" with ("))
@@ -126,8 +128,9 @@
                                         (e as BulkInsert)?.BatchText == xevent.Fields["batch_text"].ToString());
                                 if (bulkInsert != null)
                                 {
-                                    bulkInsert.Rows = int.Parse(xevent.Fields["row_count"].ToString());
-                                }
+                                    bulkInsert.RowCount = int.Parse(xevent.Fields["row_count"].ToString());
+                                    AddBulkInsertData(bulkInsert, con);
+                                }                                
                             }
                         }
 
@@ -286,7 +289,7 @@
                         {
                             if (!this.userTypeColumnDefinitions.TryGetValue((int)rpcParam.UserTypeId, out var userTypeColumns))
                             {
-                                userTypeColumns = new List<UserTypeColumn>();
+                                userTypeColumns = new List<Column>();
 
                                 using (var cmd = new SqlCommand(@"
                                 select [Name]=c.[name], [Type]=type_name(c.system_type_id), [Length]=c.max_length
@@ -304,7 +307,7 @@
                                             var rawSqlDbType = reader.GetString(1);
                                             var size = (int)reader.GetInt16(2);
                                             var sqlDbType = GetSqlDbType(rawSqlDbType);
-                                            userTypeColumns.Add(new UserTypeColumn
+                                            userTypeColumns.Add(new Column
                                             {
                                                 Name = name,
                                                 SqlDbType = sqlDbType,
@@ -331,19 +334,19 @@
                                 var insertValues = Regex.Split(insertedValuesString, ",(?=(?:[^']*'[^']*')*[^']*$)");
 
                                 var row = new List<object>();
-                                for (var i = 0; i < tvpValue.Columns.Count; i++)
+                                for (var columnIndex = 0; columnIndex < tvpValue.Columns.Count; columnIndex++)
                                 {
-                                    if (insertValues[i] == "NULL" || insertValues[i] == "default")
+                                    if (insertValues[columnIndex] == "NULL" || insertValues[columnIndex] == "default")
                                     {
                                         row.Add(DBNull.Value);
                                     }
-                                    else if (insertValues[i].Contains('\''))
+                                    else if (insertValues[columnIndex].Contains('\''))
                                     {
-                                        row.Add(GetSystemValueFromSqlString(insertValues[i], tvpValue.Columns[i].SqlDbType));
+                                        row.Add(GetSystemValueFromSqlString(insertValues[columnIndex], tvpValue.Columns[columnIndex].SqlDbType));
                                     }
                                     else
                                     {
-                                        row.Add(GetSystemValue(insertValues[i], tvpValue.Columns[i].SqlDbType));                                        
+                                        row.Add(GetSystemValue(insertValues[columnIndex], tvpValue.Columns[columnIndex].SqlDbType));                                        
                                     }
                                 }
                                 tvpValue.Rows.Add(row);
@@ -365,24 +368,58 @@
             }
         }
 
+        private void AddBulkInsertData(BulkInsert bulkInsert, SqlConnection con)
+        {
+            using (DataTable dataTable = GetBulkInsertDataFromTable(bulkInsert, con))
+            {
+                for (var rowIndex = 0; rowIndex < bulkInsert.RowCount; rowIndex++)
+                {
+                    var row = new List<object>();
+                    for (var columnIndex = 0; columnIndex < bulkInsert.Columns.Count; columnIndex++)
+                    {
+                        row.Add(dataTable.Rows[rowIndex][columnIndex]);
+                    }
+                    bulkInsert.Rows.Add(row);
+                }
+            }
+        }
+
+        private DataTable GetBulkInsertDataFromTable(BulkInsert bulkInsert, SqlConnection con)
+        {
+            var dataTable = new DataTable();
+            var cmdText = $" select top(@count) {string.Join(',', bulkInsert.Columns.Select(c => c.Name).ToArray())} from {bulkInsert.Table}";
+            using (var cmd = new SqlCommand(cmdText, con))
+            {
+                cmd.Parameters.Add(new SqlParameter("@count", SqlDbType.Int) { Value = bulkInsert.RowCount });
+                using (var dataAdapter = new SqlDataAdapter(cmd))
+                {
+                    dataAdapter.Fill(dataTable);
+                }
+            }
+            return dataTable;
+        }
+      
         private SqlDbType GetSqlDbType(string rawSqlDbType)
         {
+            var leftParenthesisIndex = rawSqlDbType.IndexOf('(');
+            var refinedSqlDbType = (leftParenthesisIndex < 0) ? rawSqlDbType : rawSqlDbType.Substring(0, leftParenthesisIndex);
+
             SqlDbType sqlDbType;
-            if (rawSqlDbType == "sysname")
+            if (refinedSqlDbType == "sysname")
             {
                 sqlDbType = SqlDbType.NVarChar;
             }
-            else if (rawSqlDbType == "numeric")
+            else if (refinedSqlDbType == "numeric")
             {
                 sqlDbType = SqlDbType.Decimal;
             }
-            else if (rawSqlDbType == "table type")
+            else if (refinedSqlDbType == "table type")
             {
                 sqlDbType = SqlDbType.Structured;
             }
-            else if (!Enum.TryParse(rawSqlDbType, true, out sqlDbType))
+            else if (!Enum.TryParse(refinedSqlDbType, true, out sqlDbType))
             {
-                throw new Exception($"{rawSqlDbType} could not be parsed into a SqlDbType");
+                throw new Exception($"{refinedSqlDbType} could not be parsed into a SqlDbType");
             }
             return sqlDbType;
         }

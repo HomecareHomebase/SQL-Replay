@@ -168,14 +168,19 @@
                     else if (evt is BulkInsert bulk)
                     {
                         var dataTable = new DataTable();
-                        foreach (Column column in bulk.Columns)
+                        foreach (var column in bulk.Columns)
                         {
                             dataTable.Columns.Add(GetDataColumn(column));
                         }
 
-                        for (int i = 0; i < bulk.Rows; ++i)
+                        for (var rowIndex = 0; rowIndex < bulk.Rows.Count; rowIndex++)
                         {
-                            dataTable.Rows.Add(dataTable.NewRow());
+                            DataRow dataRow = dataTable.NewRow();
+                            for (var columIndex = 0; columIndex < bulk.Columns.Count; columIndex++)
+                            {
+                                dataRow[columIndex] = bulk.Rows[rowIndex][columIndex];
+                            }
+                            dataTable.Rows.Add(dataRow);
                         }
 
                         using (var con = await GetOpenSqlConnection(connectionString))
@@ -314,38 +319,37 @@
         private DataColumn GetDataColumn(Column column)
         {
             string columnName = column.Name.Substring(1, column.Name.Length - 2);
-            if (column.DataType.Contains("Int"))
+            if (column.SqlDbType.ToString().Contains("Int"))
             {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(int), DefaultValue = 255};
+                return new DataColumn { ColumnName = columnName, DataType = typeof(int) };
             }
-            else if (column.DataType.Contains("Text") || column.DataType.Contains("(max)"))
+            else if (column.SqlDbType.ToString().Contains("Text") || column.SqlDbType.ToString().Contains("(max)"))
             {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(string), DefaultValue = "X".Lengthen(8000) };
+                return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
             }
-            else if (column.DataType.Contains("Char"))
+            else if (column.SqlDbType.ToString().Contains("Char"))
             {
-                var charValue = "X".Lengthen(int.Parse(column.DataType.GetParenthesesContent()));
-                return new DataColumn { ColumnName = columnName, DataType = typeof(string), DefaultValue = charValue};
+                return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
             }            
-            else if (column.DataType == "Bit")
+            else if (column.SqlDbType.ToString() == "Bit")
             {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(bool), DefaultValue = true};
+                return new DataColumn { ColumnName = columnName, DataType = typeof(bool) };
             }
-            else if (column.DataType.Contains("Date"))
+            else if (column.SqlDbType.ToString().Contains("Date"))
             {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(DateTime), DefaultValue = DateTime.UtcNow};
+                return new DataColumn { ColumnName = columnName, DataType = typeof(DateTime) };
             }
-            else if (column.DataType.Contains("Decimal") || column.DataType.Contains("Money"))
+            else if (column.SqlDbType.ToString().Contains("Decimal") || column.SqlDbType.ToString().Contains("Money"))
             {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(decimal), DefaultValue = 999.99m};
+                return new DataColumn { ColumnName = columnName, DataType = typeof(decimal) };
             }
-            else if (column.DataType.Contains("Float"))
+            else if (column.SqlDbType.ToString().Contains("Float"))
             {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(double), DefaultValue = 999.99d };
+                return new DataColumn { ColumnName = columnName, DataType = typeof(double) };
             }
             else
             {
-                throw new Exception(column.DataType + " is not a supported data type.");
+                throw new Exception(column.SqlDbType + " is not a supported data type.");
             }
         }      
     }
