@@ -319,23 +319,31 @@
         private DataColumn GetDataColumn(Column column)
         {
             string columnName = column.Name.Substring(1, column.Name.Length - 2);
-            if (column.SqlDbType.ToString().Contains("Int"))
+            if (column.SqlDbType.ToString() == "BigInt")
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(long) };
+            }
+            else if (column.SqlDbType.ToString() == "SmallInt")
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(short) };
+            }
+            else if (column.SqlDbType.ToString() == "TinyInt")
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(byte) };
+            }
+            else if (column.SqlDbType.ToString() == "Int")
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(int) };
             }
-            else if (column.SqlDbType.ToString().Contains("Text") || column.SqlDbType.ToString().Contains("(max)"))
+            else if (column.SqlDbType.ToString() == "Text" || column.SqlDbType.ToString().Contains("Char"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
-            }
-            else if (column.SqlDbType.ToString().Contains("Char"))
-            {
-                return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
-            }            
+            }                    
             else if (column.SqlDbType.ToString() == "Bit")
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(bool) };
             }
-            else if (column.SqlDbType.ToString().Contains("Date"))
+            else if (column.SqlDbType.ToString().Contains("Date") || column.SqlDbType.ToString().Contains("Time"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(DateTime) };
             }

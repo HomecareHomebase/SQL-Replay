@@ -10,36 +10,51 @@
     {
         public List<Exception> Exceptions { get; set; } = new List<Exception>();
 
-        public async Task Run(Run run)
+        public Task Warmup(Run run, string[] storedProcedureNamesToInclude, int durationInMinutes)
         {
+            var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToInclude);
+
+            List<Event> allEvents;
+            if (matchCriteria.Any() && durationInMinutes > 0)
+            {
+                allEvents = run.Sessions.SelectMany(s => s.Events)
+                    .Where(e => matchCriteria.Any(mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()) &&
+                                e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
+                    .ToList();
+            }
+            else
+            {
+                return Task.CompletedTask;
+            }          
+            return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
+        }
+
+        public Task Run(Run run, string[] storedProcedureNamesToExclude)
+        {           
+            var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToExclude);
+
+            List<Event> allEvents;
+            if (matchCriteria.Any())
+            {
+                allEvents = run.Sessions.SelectMany(s => s.Events)
+                    .Where(e => !matchCriteria.Any(mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()))
+                    .ToList();
+            }
+            else
+            {
+                allEvents = run.Sessions.SelectMany(s => s.Events)
+                    .ToList();
+            }
+            return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
+        }
+
+        public async Task RunEvents(List<Event> allEvents, DateTimeOffset eventCaptureOrigin, string connectionString)
+        {            
             //Prepare threads in thread pool
             System.Threading.ThreadPool.SetMaxThreads(32767, 32767);
             System.Threading.ThreadPool.SetMinThreads(32767, 32767);
 
             Console.WriteLine("Preparing 15 second buckets...");
-
-            //DuplicateEvents(run, 4); //synthetically increase load
-
-            //var storedProcedureNames = new string[]
-            //{
-            //    "procedure I want to exclude, including schema"
-            //};
-            //var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNames);
-
-            var allEvents = run.Sessions.SelectMany(s => s.Events)
-                //.Where(e => !matchCriteria.Any(mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()))
-                .ToList();
-
-            ////Remove procedure name and parameters so proc calls with TVP variables will get executed as SQLBatch instead of RCP and get plan stored in cache
-            //foreach (var evt in allEvents)
-            //{
-            //    if (!(evt is Rpc rpc)) continue;
-            //    if (rpc.Parameters.Any(p => p.SqlDbType == SqlDbType.Structured))
-            //    {
-            //        rpc.Procedure = null;
-            //        rpc.Parameters.Clear();
-            //    }
-            //}
 
             var allDependentEvents = allEvents.Where(e => e.TransactionId != "0" && ((e is Rpc) || (e as Transaction)?.TransactionState != "Begin")).ToList();
             var allIndependentEvents = allEvents.Where(e => e.TransactionId == "0" || (e as Transaction)?.TransactionState == "Begin");
@@ -121,7 +136,7 @@
             foreach (var bucket in orderedBuckets)
             {
                 Console.WriteLine("Starting bucket: " + bucket[0].Timestamp);
-                tasks.Add(eventExecutor.ExecuteEvents(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString));
+                tasks.Add(eventExecutor.ExecuteEvents(eventCaptureOrigin, replayOrigin, bucket, connectionString));
                 await Task.Delay(15000);
                 Console.WriteLine("Ending Delay: " + bucket[0].Timestamp);
             }
@@ -130,6 +145,20 @@
             await Task.WhenAll(tasks);
             Console.WriteLine("Executions complete.");
             this.Exceptions.AddRange(eventExecutor.Exceptions);
+        }
+
+        private void MakeRpcCallsWithTvpParametersSqlBatchCalls(IEnumerable<Event> events)
+        {
+            //Remove procedure name and parameters so proc calls with TVP variables will get executed as SQLBatch instead of RCP and get plan stored in cache
+            foreach (var evt in events)
+            {
+                if (!(evt is Rpc rpc)) continue;
+                if (rpc.Parameters.Any(p => p.SqlDbType == SqlDbType.Structured))
+                {
+                    rpc.Procedure = null;
+                    rpc.Parameters.Clear();
+                }
+}
         }
 
         private void DuplicateEvents(Run run, byte factor)

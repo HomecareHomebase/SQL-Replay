@@ -20,6 +20,9 @@ namespace SqlReplay.Console
             string inputDirectory;
             string outputDirectory;
             short clients;
+            string filePath;
+            string storedProcedureNames;
+            string cs;
 
             switch (command)
             {
@@ -29,15 +32,8 @@ namespace SqlReplay.Console
                     clients = short.Parse(args[3]);
                     string connectionString = args[4];
 
-                    DateTimeOffset? cutoff = null;
-                    if (args.Length > 5)
-                    {
-                        cutoff = DateTimeOffset.Parse(args[5]);
-                    }
-
-                    await Prep(Directory.GetFiles(inputDirectory), outputDirectory, clients, connectionString, cutoff);
+                    await Prep(Directory.GetFiles(inputDirectory), outputDirectory, clients, connectionString);
                     break;
-
                 case "prepnosc":
                     outputDirectory = args[1];
                     clients = short.Parse(args[2]);
@@ -54,21 +50,33 @@ namespace SqlReplay.Console
 
                     await PrepNewOrSignatureChange(outputDirectory, clients, numSessions, start, spName, jsonParmPath, runTimeHours);
                     break;
-
-                case "run":
-                    string filePath = args[1];
-                    string cs = null;
-                    if (args.Length > 2)
+                case "warmup":
+                    filePath = args[1];
+                    storedProcedureNames = args[2];
+                    int.TryParse(args[3], out var durationInMinutes);
+                    cs = null;
+                    if (args.Length > 4)
                     {
-                        cs = args[2];
+                        cs = args[4];
                     }
 
-                    await Run(filePath, cs);
+                    await Warmup(filePath, storedProcedureNames.Split(','), durationInMinutes, cs);
+                    break;
+                case "run":
+                    filePath = args[1];
+                    storedProcedureNames = args[2];
+                    cs = null;
+                    if (args.Length > 3)
+                    {
+                        cs = args[3];
+                    }
+
+                    await Run(filePath, storedProcedureNames.Split(','), cs);
                     break;
                 case "output":
                     inputDirectory = args[1];
                     string outputFilePath = args[2];
-                    string storedProcedureNames = args[3];
+                    storedProcedureNames = args[3];
                     await Output(Directory.GetFiles(inputDirectory), outputFilePath, storedProcedureNames.Split(','));
                     break;
                 default:
@@ -76,10 +84,10 @@ namespace SqlReplay.Console
             }
         }
 
-        internal static async Task Prep(string[] filePaths, string outputDirectory, int clients, string connectionString, DateTimeOffset? cutoff)
+        internal static async Task Prep(string[] filePaths, string outputDirectory, int clients, string connectionString)
         {
             var preProcessor = new PreProcessor();
-            Run run = await preProcessor.PreProcess(filePaths, connectionString, cutoff);
+            Run run = await preProcessor.PreProcess(filePaths, connectionString);
 
             await ProcessPrep(run, outputDirectory, clients, connectionString);
         }
@@ -117,7 +125,29 @@ namespace SqlReplay.Console
             }
         }
 
-        internal static async Task Run(string filePath, string connectionString = null)
+        internal static async Task Warmup(string filePath, string[] storedProcedureNamesToInclude, int durationInMinutes, string connectionString = null)
+        {
+            Run run = await DeserializeRun(filePath);
+            if (connectionString != null)
+            {
+                run.ConnectionString = connectionString;
+            }
+
+            var runner = new Runner();
+            await runner.Warmup(run, storedProcedureNamesToInclude, durationInMinutes);
+            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
+            string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
+            using (StreamWriter writer = new StreamWriter(logFilePath, false))
+            {
+                await writer.WriteLineAsync($"{runner.Exceptions.Count} exceptions captured");
+                foreach (Exception ex in runner.Exceptions)
+                {
+                    await writer.WriteLineAsync(ex.ToString());
+                }
+            }
+        }
+
+        internal static async Task Run(string filePath, string[] storedProcedureNamesToExclude, string connectionString = null)
         {
             Run run = await DeserializeRun(filePath);            
             if (connectionString != null)
@@ -126,7 +156,7 @@ namespace SqlReplay.Console
             }
 
             var runner = new Runner();
-            await runner.Run(run);
+            await runner.Run(run, storedProcedureNamesToExclude);
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
             string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
             using (StreamWriter writer = new StreamWriter(logFilePath, false))

@@ -20,7 +20,7 @@ namespace SqlReplay.Console
         private Dictionary<string, Dictionary<string, Parameter>> procedureParameters = new Dictionary<string, Dictionary<string, Parameter>>();
         private Dictionary<int, List<Column>> userTypeColumnDefinitions = new Dictionary<int, List<Column>>();
 
-        internal async Task<Run> PreProcess(string[] filePaths, string connectionString, DateTimeOffset? cutoff)
+        internal async Task<Run> PreProcess(string[] filePaths, string connectionString)
         {
             var sessions = new ConcurrentDictionary<string, Session>();
 
@@ -41,12 +41,6 @@ namespace SqlReplay.Console
                         {
                             return Task.CompletedTask;
                         }
-
-                        if (cutoff != null && xevent.Timestamp > cutoff)
-                        {
-                            return Task.CompletedTask;
-                        }
-
                         Event evt = null;
                         if (xevent.Name == "rpc_starting" &&
                             xevent.Fields["object_name"].ToString() != "sp_reset_connection" &&
