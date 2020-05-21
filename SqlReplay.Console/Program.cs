@@ -65,15 +65,16 @@ namespace SqlReplay.Console
                     break;
                 case "run":
                     filePath = args[1];
-                    int.TryParse(args[2], out durationInMinutes);
-                    storedProcedureNames = args[3];
+                    DateTimeOffset.TryParse(args[2], out var restorePoint);
+                    int.TryParse(args[3], out durationInMinutes);
+                    storedProcedureNames = args[4];
                     cs = null;
-                    if (args.Length > 4)
+                    if (args.Length > 5)
                     {
-                        cs = args[4];
+                        cs = args[5];
                     }
 
-                    await Run(filePath, durationInMinutes, storedProcedureNames.Split(','), cs);
+                    await Run(filePath, restorePoint, durationInMinutes, storedProcedureNames.Split(','), cs);
                     break;
                 case "output":
                     inputDirectory = args[1];
@@ -147,7 +148,7 @@ namespace SqlReplay.Console
             }
         }
 
-        internal static async Task Run(string filePath, int durationInMinutes, string[] storedProcedureNamesToExclude, string connectionString = null)
+        internal static async Task Run(string filePath, DateTimeOffset restorePoint, int durationInMinutes, string[] storedProcedureNamesToExclude, string connectionString = null)
         {
             Run run = await DeserializeRun(filePath);            
             if (connectionString != null)
@@ -156,7 +157,7 @@ namespace SqlReplay.Console
             }
 
             var runner = new Runner();
-            await runner.Run(run, durationInMinutes, storedProcedureNamesToExclude);
+            await runner.Run(run, restorePoint, durationInMinutes, storedProcedureNamesToExclude);
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
             string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
             using (StreamWriter writer = new StreamWriter(logFilePath, false))

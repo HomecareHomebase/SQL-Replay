@@ -42,7 +42,7 @@
             return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
         }
 
-        public Task Run(Run run, int durationInMinutes, string[] storedProcedureNamesToExclude)
+        public Task Run(Run run, DateTimeOffset restorePoint, int durationInMinutes, string[] storedProcedureNamesToExclude)
         {           
             var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToExclude);
 
@@ -55,6 +55,7 @@
                         .Where(e => !matchCriteria.Any(mc =>
                             ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
                             .GetValueOrDefault()) &&
+                                    e.Timestamp > restorePoint &&
                                     e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
                         .ToList();
                 }
@@ -63,7 +64,8 @@
                     allEvents = run.Sessions.SelectMany(s => s.Events)
                         .Where(e => !matchCriteria.Any(mc =>
                             ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                            .GetValueOrDefault()))
+                            .GetValueOrDefault()) &&
+                            e.Timestamp > restorePoint)
                         .ToList();
                 }
             }
@@ -72,12 +74,12 @@
                 if (durationInMinutes > 0)
                 {
                     allEvents = run.Sessions.SelectMany(s => s.Events)
-                        .Where(e => e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
+                        .Where(e => e.Timestamp > restorePoint && e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
                         .ToList();
                 }
                 else
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events)
+                    allEvents = run.Sessions.SelectMany(s => s.Events).Where(e => e.Timestamp > restorePoint)
                         .ToList();
                 }                
             }
