@@ -10,198 +10,173 @@
     {
         public List<Exception> Exceptions { get; set; } = new List<Exception>();
 
-        public Task Warmup(Run run, int durationInMinutes, string[] storedProcedureNamesToInclude)
+        public Task WarmupAsync(Run run, int durationInMinutes, string[] storedProcedureNamesToInclude)
         {
             var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToInclude);
-
-            List<Event> allEvents;
             if (matchCriteria.Any())                
             {
                 if (durationInMinutes > 0)
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events)
-                        .Where(e => matchCriteria.Any(mc =>
-                                        ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                                        .GetValueOrDefault()) &&
-                                    e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
-                        .ToList();
+                    foreach (var session in run.Sessions)
+                    {
+                        session.Events.RemoveAll(e => !(matchCriteria.Any(mc =>
+                                                          ((e as Rpc)?.Procedure?.Equals(mc, 
+                                                              StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()) &&
+                                                      e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes)));
+                    }
                 }
                 else
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events)
-                        .Where(e => matchCriteria.Any(mc =>
-                                        ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                                        .GetValueOrDefault()))
-                        .ToList();
+                    foreach (var session in run.Sessions)
+                    {
+                        session.Events.RemoveAll(e => !matchCriteria.Any(mc =>
+                                                            ((e as Rpc)?.Procedure?.Equals(mc,
+                                                                StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault()));
+                    }
                 }
             }
             else
             {
                 return Task.CompletedTask;
             }          
-            return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
+            return RunEventsAsync(run);
         }
 
-        public Task Run(Run run, DateTimeOffset restorePoint, int durationInMinutes, string[] storedProcedureNamesToExclude)
+        public Task RunAsync(Run run, DateTimeOffset restorePoint, int durationInMinutes, string[] storedProcedureNamesToExclude)
         {           
             var matchCriteria = StoredProcedureSearch.CreateMatchCriteria(storedProcedureNamesToExclude);
-
-            List<Event> allEvents;
             if (matchCriteria.Any())
             {
                 if (durationInMinutes > 0)
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events)
-                        .Where(e => !matchCriteria.Any(mc =>
-                            ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                            .GetValueOrDefault()) &&
-                                    e.Timestamp > restorePoint &&
-                                    e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
-                        .ToList();
+                    foreach (var session in run.Sessions)
+                    {
+                        session.Events.RemoveAll(e => !(!matchCriteria.Any(mc =>
+                                                          ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
+                                                          .GetValueOrDefault()) &&
+                                                      e.Timestamp > restorePoint &&
+                                                      e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes)));
+                    }
                 }
                 else
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events)
-                        .Where(e => !matchCriteria.Any(mc =>
-                            ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                            .GetValueOrDefault()) &&
-                            e.Timestamp > restorePoint)
-                        .ToList();
+                    foreach (var session in run.Sessions)
+                    {
+                        session.Events.RemoveAll(e => !(!matchCriteria.Any(mc =>
+                                                            ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
+                                                            .GetValueOrDefault()) &&
+                                                        e.Timestamp > restorePoint));
+                    }
                 }
             }
             else
             {
                 if (durationInMinutes > 0)
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events)
-                        .Where(e => e.Timestamp > restorePoint && e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes))
-                        .ToList();
+                    foreach (var session in run.Sessions)
+                    {
+                        session.Events.RemoveAll(e => !(e.Timestamp > restorePoint &&
+                                                        e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes)));
+                    }
                 }
                 else
                 {
-                    allEvents = run.Sessions.SelectMany(s => s.Events).Where(e => e.Timestamp > restorePoint)
-                        .ToList();
+                    foreach (var session in run.Sessions)
+                    {
+                        session.Events.RemoveAll(e => !(e.Timestamp > restorePoint));
+                    }
                 }                
             }
-            return RunEvents(allEvents, run.EventCaptureOrigin, run.ConnectionString);
-        }
+            foreach (var session in run.Sessions)
+            {                
+                session.Events.RemoveAll(e => 
+                {
+                    if (e is Rpc rpc)
+                    {
+                        return rpc.Statement.Contains("OPENROWSET", StringComparison.CurrentCultureIgnoreCase) ||
+                                rpc.Statement.Contains("OPENDATASOURCE", StringComparison.CurrentCultureIgnoreCase);
+                    }
+                    return false;
+                });
+            }
+            return RunEventsAsync(run);
+        }        
 
-        public async Task RunEvents(List<Event> allEvents, DateTimeOffset eventCaptureOrigin, string connectionString)
-        {            
-            //Prepare threads in thread pool
+        private async Task RunEventsAsync(Run run)
+        {
+            Console.WriteLine("Warming up thread pool...");
+
             System.Threading.ThreadPool.SetMaxThreads(32767, 32767);
             System.Threading.ThreadPool.SetMinThreads(32767, 32767);
 
-            Console.WriteLine("Preparing 15 second buckets...");
+            Console.WriteLine("Nesting events...");
 
-            //Dependent events are associated to a transaction but aren't the begin transaction
-            var allDependentEvents = allEvents.Where(e => e.TransactionId != "0" && ((e is Rpc) || (e as Transaction)?.TransactionState != "Begin")).ToList();
-            //Independent events have no transaction or are a begin transaction
-            var allIndependentEvents = allEvents.Where(e => e.TransactionId == "0" || (e as Transaction)?.TransactionState == "Begin");
-
-            //Split independent events up into buckets of 15 second intervals based on their Timestamp
-            var groups = allIndependentEvents.GroupBy(r => r.Timestamp.ToString("ddhhmm") + r.Timestamp.Second / 15).OrderBy(g => g.Key);
-            var buckets = new Dictionary<string, List<Event>>();
-            foreach (var group in groups)
+            //Remove any sessions with no events
+            run.Sessions.RemoveAll(s => s.Events.Count == 0);
+            foreach (Session session in run.Sessions)
             {
-                var trxStarts = group.Where(e => e.TransactionId != "0").Select(e => (e as Transaction)).ToList();
-                var startHash = new HashSet<string>(trxStarts.Select(x => x.TransactionId));
-                var startDict = new Dictionary<string, Transaction>();
-                foreach (var trx in trxStarts)
+                var nestedEvents = new List<Event>();
+                Transaction parentTransaction = null;
+                foreach (Event evt in session.Events)
                 {
-                    trx.Events = new List<Event>();
-                    startDict.Add(trx.TransactionId, trx);
-                }
-
-                //Assign dependent events to their begin transaction
-                var bucket = new List<Event>(group);
-                foreach(var evt in allDependentEvents)
-                {
-                    if (startHash.Contains(evt.TransactionId))
+                    if (parentTransaction != null && evt.TransactionId != "0")
                     {
-                        startDict[evt.TransactionId].Events.Add(evt);                        
-                    }                    
+                        parentTransaction.Events.Add(evt);
+                    }
+                    else
+                    {
+                        nestedEvents.Add(evt);
+                    }
+                    if (evt is Transaction transaction)
+                    {
+                        switch (transaction.TransactionState)
+                        {
+                            case "Begin":
+                                parentTransaction = transaction;
+                                break;
+                            case "Commit":
+                            case "Rollback":
+                                parentTransaction = session.Events
+                                    .Where(e => ((e as Transaction)?.Events.Contains(parentTransaction)).GetValueOrDefault())
+                                        .SingleOrDefault() as Transaction;
+                                break;
+                        }
+                    }
                 }
-
-                //Throw away any begin transactions that don't have anything associated with it
-                trxStarts.RemoveAll(t => t.Events.Count == 0);
-
-                //Order transaction's events by EventSequence and make sure they close
-                foreach (var trx in trxStarts)
-                {
-                    trx.Events = trx.Events.OrderBy(e => e.EventSequence).ToList();
-                    CloseTransactionIfOpen(trx);
-                }
-                buckets.Add(group.Key, bucket);              
+                session.Events = nestedEvents;
             }
 
-            //Identify orphaned events with no begin transaction
-            var bucketDependentEvents = buckets.SelectMany(b => b.Value.Where(i => i is Transaction).SelectMany(i => (i as Transaction)?.Events));
-            var orphanEvents = allDependentEvents.Except(bucketDependentEvents).ToList();
-            foreach (var group in orphanEvents.GroupBy(e => e.TransactionId))
+            Console.WriteLine("Preparing 15 second buckets of sessions...");
+            
+            var buckets = run.Sessions.GroupBy(s => 
             {
-                //Make orphans a begin transaction and order them by EventSequence
-                var transaction = new Transaction
-                {
-                    Events = group.OrderBy(e => e.EventSequence).ToList()
-                };
-                var firstEvt = transaction.Events.First();
-                transaction.TransactionId = firstEvt.TransactionId;
-                transaction.TransactionState = "Begin";
-                transaction.EventSequence = firstEvt.EventSequence - 1;
-                transaction.Timestamp = firstEvt.Timestamp.AddMilliseconds(1);
-                //Make sure this new transaction will close
-                CloseTransactionIfOpen(transaction);
-
-                //Find (or create) a bucket for this new transaction
-                var key = transaction.Timestamp.ToString("ddhhmm") + transaction.Timestamp.Second / 15;
-                if (buckets.TryGetValue(key, out var bucket))
-                {
-                    bucket.Add(transaction);
-                }
-                else
-                {
-                    buckets.Add(key, new List<Event> { transaction });
-                }
-            }
-
-            //Order the buckets by key and all their items by Timestamp since EventSequence is only reliable within a transaction
-            var orderedBuckets = buckets.OrderBy(b => b.Key).Select(b => b.Value.OrderBy(e => e.Timestamp).ToList()).ToList();       
-
+                Event firstEvt = s.Events.First();
+                return firstEvt.Timestamp.ToString("ddhhmm") + firstEvt.Timestamp.Second / 15;         
+            })
+            .OrderBy(g => g.Key)
+            .Select(g => g.OrderBy(s => s.Events.First().Timestamp)
+                .ToList()
+            ).ToList();
+           
             Console.WriteLine("Kicking off executions...");
 
             var tasks = new List<Task>();
             var eventExecutor = new EventExecutor();
             var replayOrigin = DateTimeOffset.UtcNow;
 
-            foreach (var bucket in orderedBuckets)
+            foreach (var bucket in buckets)
             {
-                Console.WriteLine("Starting bucket: " + bucket[0].Timestamp);
-                tasks.Add(eventExecutor.ExecuteEvents(eventCaptureOrigin, replayOrigin, bucket, connectionString));
+                Console.WriteLine("Starting bucket: " + bucket.First().Events.First().Timestamp);
+                tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString));
                 await Task.Delay(15000);
-                Console.WriteLine("Ending Delay: " + bucket[0].Timestamp);
+                Console.WriteLine("Ending Delay: " + bucket.First().Events.First().Timestamp);
             }
 
             Console.WriteLine("Waiting for unfinished executions to complete...");
             await Task.WhenAll(tasks);
             Console.WriteLine("Executions complete.");
             this.Exceptions.AddRange(eventExecutor.Exceptions);
-        }
-
-        private void CloseTransactionIfOpen(Transaction transaction)
-        {
-            //Close open transactions at end that don't include a commit or rollback
-            if (transaction.Events.Any(e => (e as Transaction)?.TransactionState == "Commit" ||
-                                            (e as Transaction)?.TransactionState == "Rollback")) return;
-            var lastEvt = transaction.Events.Last();
-            transaction.Events.Add(new Transaction
-            {
-                TransactionId = lastEvt.TransactionId,
-                TransactionState = "Commit",
-                EventSequence = lastEvt.EventSequence + 1,
-                Timestamp = lastEvt.Timestamp.AddMilliseconds(1)
-            });
-        }
+        }       
 
         private void MakeRpcCallsWithTvpParametersSqlBatchCalls(IEnumerable<Event> events)
         {

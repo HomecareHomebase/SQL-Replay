@@ -88,7 +88,7 @@ namespace SqlReplay.Console
         internal static async Task Prep(string[] filePaths, string outputDirectory, int clients, string connectionString)
         {
             var preProcessor = new PreProcessor();
-            Run run = await preProcessor.PreProcess(filePaths, connectionString);
+            Run run = await preProcessor.PreProcessAsync(filePaths, connectionString);
 
             await ProcessPrep(run, outputDirectory, clients, connectionString);
         }
@@ -135,7 +135,7 @@ namespace SqlReplay.Console
             }
 
             var runner = new Runner();
-            await runner.Warmup(run, durationInMinutes, storedProcedureNamesToInclude);
+            await runner.WarmupAsync(run, durationInMinutes, storedProcedureNamesToInclude);
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
             string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
             using (StreamWriter writer = new StreamWriter(logFilePath, false))
@@ -157,7 +157,7 @@ namespace SqlReplay.Console
             }
 
             var runner = new Runner();
-            await runner.Run(run, restorePoint, durationInMinutes, storedProcedureNamesToExclude);
+            await runner.RunAsync(run, restorePoint, durationInMinutes, storedProcedureNamesToExclude);
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
             string logFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileName(filePath).Replace(fileNameWithoutExtension, fileNameWithoutExtension + "_log"));
             using (StreamWriter writer = new StreamWriter(logFilePath, false))

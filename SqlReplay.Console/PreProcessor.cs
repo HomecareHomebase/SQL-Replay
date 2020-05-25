@@ -18,9 +18,9 @@
         private Dictionary<string, Dictionary<string, Parameter>> procedureParameters = new Dictionary<string, Dictionary<string, Parameter>>();
         private Dictionary<int, List<Column>> userTypeColumnDefinitions = new Dictionary<int, List<Column>>();
 
-        internal async Task<Run> PreProcess(string[] filePaths, string connectionString)
+        internal async Task<Run> PreProcessAsync(string[] filePaths, string connectionString)
         {
-            var sessions = new ConcurrentDictionary<string, Session>();
+            var sessionDictionary = new ConcurrentDictionary<string, Session>();
 
             using (var con = new SqlConnection(connectionString))
             {
@@ -110,7 +110,7 @@
                         else if (xevent.Name == "sql_batch_completed" &&
                                  xevent.Fields["batch_text"].ToString().Contains("insert bulk"))
                         {
-                            if (!sessions.TryGetValue(xevent.Actions["session_id"].ToString(), out var session))
+                            if (!sessionDictionary.TryGetValue(xevent.Actions["session_id"].ToString(), out var session))
                             {
                                 throw new Exception(
                                     $"Could not find session ID {xevent.Actions["session_id"].ToString()} for bulk insert.");
@@ -130,7 +130,7 @@
                         if (evt != null)
                         {
                             string sessionId = xevent.Actions["session_id"].ToString();
-                            Session session = sessions.GetOrAdd(sessionId, new Session() {SessionId = sessionId});
+                            Session session = sessionDictionary.GetOrAdd(sessionId, new Session() {SessionId = sessionId});
                             session.Events.Add(evt);                            
                         }                        
                         return Task.CompletedTask;
@@ -138,7 +138,11 @@
                 }
             }
 
-            foreach (Session session in sessions.Values)
+            var sessions = sessionDictionary.Values.ToList();
+
+            //Remove any sessions with no events
+            sessions.RemoveAll(s => s.Events.Count == 0);
+            foreach (Session session in sessions)
             {
                 //Remove any bulk inserts where we never found a corresponding sql_batch_completed
                 session.Events.RemoveAll(e => (e as BulkInsert)?.RowCount == 0);
@@ -147,7 +151,7 @@
 
             var run = new Run()
             {                
-                Sessions = sessions.Values.ToArray().Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().Timestamp).ToList()
+                Sessions = sessions.Where(s => s.Events.Count > 0).OrderBy(s => s.Events.First().Timestamp).ToList()
             };
             run.EventCaptureOrigin = run.Sessions.First().Events.First().Timestamp;
             return run;
