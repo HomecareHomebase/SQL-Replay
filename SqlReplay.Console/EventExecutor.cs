@@ -13,154 +13,146 @@
     {       
         public List<Exception> Exceptions { get; set; } = new List<Exception>();
 
-        public async Task ExecuteSessionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, IEnumerable<Session> sessions, string connectionString)
+        public async Task ExecuteEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, IEnumerable<Event> events, string connectionString)
         {
-            List<Task> sessionTasks = new List<Task>();
-            foreach (var session in sessions)
+            var tasks = new List<Task>();
+            foreach (var evt in events)
             {
-                sessionTasks.Add(Task.Run(async () =>
+                tasks.Add(Task.Run(async () =>
                 {
-                    List<Task> evtTasks = new List<Task>();
-                    foreach (var evt in session.Events)
+                    TimeSpan timeToDelay = evt.Timestamp.Subtract(eventCaptureOrigin).Subtract(DateTimeOffset.UtcNow.Subtract(replayOrigin));
+                    if (timeToDelay.TotalMilliseconds > 0)
                     {
-                        evtTasks.Add(Task.Run(async () =>
+                        await Task.Delay(timeToDelay);
+                    }
+                    if (evt is Transaction transaction)
+                    {
+                        //Only pay attention to Begin as any Rollback at this level would not have a corresponding Begin
+                        if (transaction.TransactionState == "Begin")
+                        {                                    
+                            try
+                            {
+                                using (var transactionScope = new TransactionScope(
+                                    TransactionScopeOption.Required, 
+                                    new TransactionOptions()
+                                    {
+                                        IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
+                                        Timeout = TimeSpan.FromSeconds(1800)
+                                    }, 
+                                    TransactionScopeAsyncFlowOption.Enabled))
+                                {
+                                    using (var sqlConnection = new SqlConnection(connectionString))
+                                    {
+                                        await sqlConnection.OpenAsync();
+                                        await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, sqlConnection);                                                
+                                    }
+                                    transactionScope.Complete();
+                                }                                            
+                            }
+                            catch (TransactionAbortedException)
+                            {
+                                //These are simply rollbacks, no need to log
+                            }
+                            catch (Exception ex)
+                            {
+                                this.Exceptions.Add(ex);
+                            }
+                        }
+                    }
+                    else if (evt is Rpc rpc)
+                    {
+                        string commandText;
+                        CommandType commandType;
+                        if (!string.IsNullOrWhiteSpace(rpc.Procedure))
                         {
-                            TimeSpan timeToDelay = evt.Timestamp.Subtract(eventCaptureOrigin).Subtract(DateTimeOffset.UtcNow.Subtract(replayOrigin));
-                            if (timeToDelay.TotalMilliseconds > 0)
+                            commandText = rpc.Procedure;
+                            commandType = CommandType.StoredProcedure;
+                        }
+                        else
+                        {
+                            commandText = rpc.Statement;
+                            commandType = CommandType.Text;
+                        }
+                        try
+                        {
+                            using (var sqlConnection = new SqlConnection(connectionString))
                             {
-                                await Task.Delay(timeToDelay);
-                            }
-                            if (evt is Transaction transaction)
-                            {
-                                //Only pay attention to Begin as any Rollback at this level would not have a corresponding Begin
-                                if (transaction.TransactionState == "Begin")
-                                {                                    
-                                    try
-                                    {
-                                        using (var transactionScope = new TransactionScope(
-                                            TransactionScopeOption.Required, 
-                                            new TransactionOptions()
-                                            {
-                                                IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                                Timeout = TimeSpan.FromSeconds(1800)
-                                            }, 
-                                            TransactionScopeAsyncFlowOption.Enabled))
-                                        {
-                                            using (var sqlConnection = new SqlConnection(connectionString))
-                                            {
-                                                await sqlConnection.OpenAsync();
-                                                await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, sqlConnection);                                                
-                                            }
-                                            transactionScope.Complete();
-                                        }                                            
-                                    }
-                                    catch (TransactionAbortedException)
-                                    {
-                                        //These are simply rollbacks, no need to log
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        this.Exceptions.Add(ex);
-                                    }
+                                await sqlConnection.OpenAsync();
+                                using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                                {
+                                    CommandType = commandType,
+                                    CommandTimeout = 1800
+                                })
+                                {
+                                    SetupSqlCommandParameters(sqlCommand, rpc);
+                                    await sqlCommand.ExecuteNonQueryAsync();
                                 }
                             }
-                            else if (evt is Rpc rpc)
+                        }
+                        catch (Exception ex)
+                        {
+                            this.Exceptions.Add(ex);
+                        }
+                    }
+                    else if (evt is BulkInsert bulkInsert)
+                    {
+                        if (bulkInsert.Rows.Count == 0) { return; }
+                        var dataTable = new DataTable();
+                        foreach (var column in bulkInsert.Columns)
+                        {
+                            dataTable.Columns.Add(GetDataColumn(column));
+                        }
+                        for (var rowIndex = 0; rowIndex < bulkInsert.Rows.Count; rowIndex++)
+                        {
+                            DataRow dataRow = dataTable.NewRow();
+                            for (var columIndex = 0; columIndex < bulkInsert.Columns.Count; columIndex++)
                             {
-                                string commandText;
-                                CommandType commandType;
-                                if (!string.IsNullOrWhiteSpace(rpc.Procedure))
+                                dataRow[columIndex] = bulkInsert.Rows[rowIndex][columIndex];
+                            }
+                            dataTable.Rows.Add(dataRow);
+                        }
+                        SqlBulkCopyOptions options;
+                        if (bulkInsert.CheckConstraints && bulkInsert.FireTriggers)
+                        {
+                            options = SqlBulkCopyOptions.CheckConstraints | SqlBulkCopyOptions.FireTriggers;
+                        }
+                        else if (bulkInsert.CheckConstraints)
+                        {
+                            options = SqlBulkCopyOptions.CheckConstraints;
+                        }
+                        else if (bulkInsert.FireTriggers)
+                        {
+                            options = SqlBulkCopyOptions.FireTriggers;
+                        }
+                        else
+                        {
+                            options = SqlBulkCopyOptions.Default;
+                        }
+                        try
+                        {
+                            using (var sqlConnection = new SqlConnection(connectionString))
+                            {
+                                await sqlConnection.OpenAsync();
+                                using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) { BulkCopyTimeout = 1800 })
                                 {
-                                    commandText = rpc.Procedure;
-                                    commandType = CommandType.StoredProcedure;
-                                }
-                                else
-                                {
-                                    commandText = rpc.Statement;
-                                    commandType = CommandType.Text;
-                                }
-                                try
-                                {
-                                    using (var sqlConnection = new SqlConnection(connectionString))
+                                    bulkCopy.DestinationTableName = bulkInsert.Table;
+                                    foreach (DataColumn column in dataTable.Columns)
                                     {
-                                        await sqlConnection.OpenAsync();
-                                        using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
-                                        {
-                                            CommandType = commandType,
-                                            CommandTimeout = 1800
-                                        })
-                                        {
-                                            SetupSqlCommandParameters(sqlCommand, rpc);
-                                            await sqlCommand.ExecuteNonQueryAsync();
-                                        }
+                                        bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName, column.ColumnName));
                                     }
-                                }
-                                catch (Exception ex)
-                                {
-                                    this.Exceptions.Add(ex);
+                                    await bulkCopy.WriteToServerAsync(dataTable);
                                 }
                             }
-                            else if (evt is BulkInsert bulkInsert)
-                            {
-                                if (bulkInsert.Rows.Count == 0) { return; }
-                                var dataTable = new DataTable();
-                                foreach (var column in bulkInsert.Columns)
-                                {
-                                    dataTable.Columns.Add(GetDataColumn(column));
-                                }
-                                for (var rowIndex = 0; rowIndex < bulkInsert.Rows.Count; rowIndex++)
-                                {
-                                    DataRow dataRow = dataTable.NewRow();
-                                    for (var columIndex = 0; columIndex < bulkInsert.Columns.Count; columIndex++)
-                                    {
-                                        dataRow[columIndex] = bulkInsert.Rows[rowIndex][columIndex];
-                                    }
-                                    dataTable.Rows.Add(dataRow);
-                                }
-                                SqlBulkCopyOptions options;
-                                if (bulkInsert.CheckConstraints && bulkInsert.FireTriggers)
-                                {
-                                    options = SqlBulkCopyOptions.CheckConstraints | SqlBulkCopyOptions.FireTriggers;
-                                }
-                                else if (bulkInsert.CheckConstraints)
-                                {
-                                    options = SqlBulkCopyOptions.CheckConstraints;
-                                }
-                                else if (bulkInsert.FireTriggers)
-                                {
-                                    options = SqlBulkCopyOptions.FireTriggers;
-                                }
-                                else
-                                {
-                                    options = SqlBulkCopyOptions.Default;
-                                }
-                                try
-                                {
-                                    using (var sqlConnection = new SqlConnection(connectionString))
-                                    {
-                                        await sqlConnection.OpenAsync();
-                                        using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) { BulkCopyTimeout = 1800 })
-                                        {
-                                            bulkCopy.DestinationTableName = bulkInsert.Table;
-                                            foreach (DataColumn column in dataTable.Columns)
-                                            {
-                                                bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName, column.ColumnName));
-                                            }
-                                            await bulkCopy.WriteToServerAsync(dataTable);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    this.Exceptions.Add(ex);
-                                }
-                            }
-                        }));
-                        await Task.WhenAll(evtTasks);
+                        }
+                        catch (Exception ex)
+                        {
+                            this.Exceptions.Add(ex);
+                        }
                     }
                 }));
+                await Task.WhenAll(tasks);
             }
-            await Task.WhenAll(sessionTasks);
-            Console.WriteLine("Ending bucket: " + sessions.First().Events.First().Timestamp);
+            Console.WriteLine("Ending bucket: " + events.First().Timestamp);
         }
 
         private async Task ExecuteTransactionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, Transaction transaction, SqlConnection sqlConnection)

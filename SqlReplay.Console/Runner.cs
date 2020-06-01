@@ -146,15 +146,12 @@
                 session.Events = nestedEvents;
             }
 
-            Console.WriteLine("Preparing 15 second buckets of sessions...");
+            Console.WriteLine("Preparing 15 second buckets of events...");
             
-            var buckets = run.Sessions.GroupBy(s => 
-            {
-                Event firstEvt = s.Events.First();
-                return firstEvt.Timestamp.ToString("ddhhmm") + firstEvt.Timestamp.Second / 15;         
-            })
+            var buckets = run.Sessions.SelectMany(s => s.Events).GroupBy(
+                    e => e.Timestamp.ToString("ddhhmm") + e.Timestamp.Second / 15)
             .OrderBy(g => g.Key)
-            .Select(g => g.OrderBy(s => s.Events.First().Timestamp)
+            .Select(g => g.OrderBy(e => e.Timestamp)
                 .ToList()
             ).ToList();
            
@@ -166,10 +163,10 @@
 
             foreach (var bucket in buckets)
             {
-                Console.WriteLine("Starting bucket: " + bucket.First().Events.First().Timestamp);
-                tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString));
+                Console.WriteLine("Starting bucket: " + bucket.First().Timestamp);
+                tasks.Add(eventExecutor.ExecuteEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString));
                 await Task.Delay(15000);
-                Console.WriteLine("Ending Delay: " + bucket.First().Events.First().Timestamp);
+                Console.WriteLine("Ending Delay: " + bucket.First().Timestamp);
             }
 
             Console.WriteLine("Waiting for unfinished executions to complete...");
