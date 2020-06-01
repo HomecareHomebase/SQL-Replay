@@ -99,6 +99,7 @@
                     return false;
                 });
             }
+            run.EventCaptureOrigin = restorePoint;
             return RunEventsAsync(run);
         }        
 
