@@ -210,6 +210,50 @@
                         await sqlCommand.ExecuteNonQueryAsync();
                     }
                 }
+                else if (evt is BulkInsert bulkInsert)
+                {
+                    if (bulkInsert.Rows.Count == 0) { continue; }
+                    var dataTable = new DataTable();
+                    foreach (var column in bulkInsert.Columns)
+                    {
+                        dataTable.Columns.Add(GetDataColumn(column));
+                    }
+                    for (var rowIndex = 0; rowIndex < bulkInsert.Rows.Count; rowIndex++)
+                    {
+                        DataRow dataRow = dataTable.NewRow();
+                        for (var columIndex = 0; columIndex < bulkInsert.Columns.Count; columIndex++)
+                        {
+                            dataRow[columIndex] = bulkInsert.Rows[rowIndex][columIndex];
+                        }
+                        dataTable.Rows.Add(dataRow);
+                    }
+                    SqlBulkCopyOptions options;
+                    if (bulkInsert.CheckConstraints && bulkInsert.FireTriggers)
+                    {
+                        options = SqlBulkCopyOptions.CheckConstraints | SqlBulkCopyOptions.FireTriggers;
+                    }
+                    else if (bulkInsert.CheckConstraints)
+                    {
+                        options = SqlBulkCopyOptions.CheckConstraints;
+                    }
+                    else if (bulkInsert.FireTriggers)
+                    {
+                        options = SqlBulkCopyOptions.FireTriggers;
+                    }
+                    else
+                    {
+                        options = SqlBulkCopyOptions.Default;
+                    }
+                    using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) { BulkCopyTimeout = 1800 })
+                    {
+                        bulkCopy.DestinationTableName = bulkInsert.Table;
+                        foreach (DataColumn column in dataTable.Columns)
+                        {
+                            bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName, column.ColumnName));
+                        }
+                        await bulkCopy.WriteToServerAsync(dataTable);
+                    }
+                }
             }
         }
 
