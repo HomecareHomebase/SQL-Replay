@@ -34,25 +34,29 @@
                             {
                                 //Only pay attention to Begin as any Rollback at this level would not have a corresponding Begin
                                 if (transaction.TransactionState == "Begin")
-                                {                                    
+                                {
                                     try
                                     {
-                                        using (var transactionScope = new TransactionScope(
-                                            TransactionScopeOption.Required, 
-                                            new TransactionOptions()
-                                            {
-                                                IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                                Timeout = TimeSpan.FromSeconds(1800)
-                                            }, 
-                                            TransactionScopeAsyncFlowOption.Enabled))
+                                        await RetryDeadlock(async () =>
                                         {
-                                            using (var sqlConnection = new SqlConnection(connectionString))
+                                            using (var transactionScope = new TransactionScope(
+                                                TransactionScopeOption.Required,
+                                                new TransactionOptions()
+                                                {
+                                                    IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
+                                                    Timeout = TimeSpan.FromSeconds(1800)
+                                                },
+                                                TransactionScopeAsyncFlowOption.Enabled))
                                             {
-                                                await sqlConnection.OpenAsync();
-                                                await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, sqlConnection);                                                
+                                                using (var sqlConnection = new SqlConnection(connectionString))
+                                                {
+                                                    await sqlConnection.OpenAsync();
+                                                    await ExecuteTransactionEventsAsync(eventCaptureOrigin,
+                                                        replayOrigin, transaction, sqlConnection);
+                                                }
+                                                transactionScope.Complete();
                                             }
-                                            transactionScope.Complete();
-                                        }                                            
+                                        });
                                     }
                                     catch (TransactionAbortedException)
                                     {
@@ -80,19 +84,22 @@
                                 }
                                 try
                                 {
-                                    using (var sqlConnection = new SqlConnection(connectionString))
+                                    await RetryDeadlock(async () =>
                                     {
-                                        await sqlConnection.OpenAsync();
-                                        using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                                        using (var sqlConnection = new SqlConnection(connectionString))
                                         {
-                                            CommandType = commandType,
-                                            CommandTimeout = 1800
-                                        })
-                                        {
-                                            SetupSqlCommandParameters(sqlCommand, rpc);
-                                            await sqlCommand.ExecuteNonQueryAsync();
+                                            await sqlConnection.OpenAsync();
+                                            using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                                            {
+                                                CommandType = commandType,
+                                                CommandTimeout = 1800
+                                            })
+                                            {
+                                                SetupSqlCommandParameters(sqlCommand, rpc);
+                                                await sqlCommand.ExecuteNonQueryAsync();
+                                            }
                                         }
-                                    }
+                                    });
                                 }
                                 catch (Exception ex)
                                 {
@@ -135,19 +142,26 @@
                                 }
                                 try
                                 {
-                                    using (var sqlConnection = new SqlConnection(connectionString))
+                                    await RetryDeadlock(async () =>
                                     {
-                                        await sqlConnection.OpenAsync();
-                                        using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) { BulkCopyTimeout = 1800 })
+                                        using (var sqlConnection = new SqlConnection(connectionString))
                                         {
-                                            bulkCopy.DestinationTableName = bulkInsert.Table;
-                                            foreach (DataColumn column in dataTable.Columns)
+                                            await sqlConnection.OpenAsync();
+                                            using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null)
+                                                {BulkCopyTimeout = 1800})
                                             {
-                                                bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName, column.ColumnName));
+                                                bulkCopy.DestinationTableName = bulkInsert.Table;
+                                                foreach (DataColumn column in dataTable.Columns)
+                                                {
+                                                    bulkCopy.ColumnMappings.Add(
+                                                        new SqlBulkCopyColumnMapping(column.ColumnName,
+                                                            column.ColumnName));
+                                                }
+
+                                                await bulkCopy.WriteToServerAsync(dataTable);
                                             }
-                                            await bulkCopy.WriteToServerAsync(dataTable);
                                         }
-                                    }
+                                    });
                                 }
                                 catch (Exception ex)
                                 {
@@ -189,7 +203,7 @@
                             nestedTransactionScope.Complete();
                         }
                     }
-                    else if (transaction.TransactionState == "Rollback")
+                    else if (nestedTransaction.TransactionState == "Rollback")
                     {
                         throw new TransactionAbortedException();
                     }
@@ -263,6 +277,23 @@
                     }
                 }
             }
+        }
+
+        private Task RetryDeadlock(Func<Task> func)
+        {
+            var tries = 0;
+            while (tries < 3)
+            {
+                try
+                {
+                    return func();
+                }
+                catch (SqlException ex) when (ex.Number == 1205)
+                {
+                    tries++;
+                }
+            }
+            return Task.CompletedTask;
         }
 
         private void SetupSqlCommandParameters(SqlCommand cmd, Rpc rpc)
