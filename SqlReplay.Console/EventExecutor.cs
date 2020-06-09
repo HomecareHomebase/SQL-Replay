@@ -44,16 +44,11 @@
                                                 new TransactionOptions()
                                                 {
                                                     IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                                    Timeout = TimeSpan.FromSeconds(1800)
+                                                    Timeout = TimeSpan.FromSeconds(3600)
                                                 },
                                                 TransactionScopeAsyncFlowOption.Enabled))
                                             {
-                                                using (var sqlConnection = new SqlConnection(connectionString))
-                                                {
-                                                    await sqlConnection.OpenAsync();
-                                                    await ExecuteTransactionEventsAsync(eventCaptureOrigin,
-                                                        replayOrigin, transaction, sqlConnection);
-                                                }
+                                                await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, connectionString);
                                                 transactionScope.Complete();
                                             }
                                         });
@@ -177,7 +172,7 @@
             Console.WriteLine("Ending bucket: " + sessions.First().Events.First().Timestamp);
         }
 
-        private async Task ExecuteTransactionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, Transaction transaction, SqlConnection sqlConnection)
+        private async Task ExecuteTransactionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, Transaction transaction, string connectionString)
         {
             foreach (var evt in transaction.Events)
             {
@@ -195,11 +190,11 @@
                             new TransactionOptions()
                             {
                                 IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                Timeout = TimeSpan.FromSeconds(1800)
+                                Timeout = TimeSpan.FromSeconds(3600)
                             },
                             TransactionScopeAsyncFlowOption.Enabled))
                         {
-                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, nestedTransaction, sqlConnection);
+                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, nestedTransaction, connectionString);
                             nestedTransactionScope.Complete();
                         }
                     }
@@ -222,14 +217,18 @@
                         commandText = rpc.Statement;
                         commandType = CommandType.Text;
                     }
-                    using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                    using (var sqlConnection = new SqlConnection(connectionString))
                     {
-                        CommandType = commandType,
-                        CommandTimeout = 1800
-                    })
-                    {
-                        SetupSqlCommandParameters(sqlCommand, rpc);
-                        await sqlCommand.ExecuteNonQueryAsync();
+                        await sqlConnection.OpenAsync();
+                        using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                        {
+                            CommandType = commandType,
+                            CommandTimeout = 1800
+                        })
+                        {
+                            SetupSqlCommandParameters(sqlCommand, rpc);
+                            await sqlCommand.ExecuteNonQueryAsync();
+                        }
                     }
                 }
                 else if (evt is BulkInsert bulkInsert)
@@ -266,14 +265,20 @@
                     {
                         options = SqlBulkCopyOptions.Default;
                     }
-                    using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) { BulkCopyTimeout = 1800 })
+                    using (var sqlConnection = new SqlConnection(connectionString))
                     {
-                        bulkCopy.DestinationTableName = bulkInsert.Table;
-                        foreach (DataColumn column in dataTable.Columns)
+                        await sqlConnection.OpenAsync();
+                        using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) {BulkCopyTimeout = 1800})
                         {
-                            bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName, column.ColumnName));
+                            bulkCopy.DestinationTableName = bulkInsert.Table;
+                            foreach (DataColumn column in dataTable.Columns)
+                            {
+                                bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName,
+                                    column.ColumnName));
+                            }
+
+                            await bulkCopy.WriteToServerAsync(dataTable);
                         }
-                        await bulkCopy.WriteToServerAsync(dataTable);
                     }
                 }
             }
