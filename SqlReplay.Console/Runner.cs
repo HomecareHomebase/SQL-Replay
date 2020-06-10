@@ -167,10 +167,15 @@
 
             foreach (var bucket in buckets)
             {
-                Console.WriteLine("Starting bucket: " + bucket.First().Events.First().Timestamp);
+                var bucketTimestamp = bucket.First().Events.First().Timestamp;
+                TimeSpan timeToDelay = bucketTimestamp.Subtract(run.EventCaptureOrigin).Subtract(DateTimeOffset.UtcNow.Subtract(replayOrigin));
+                if (timeToDelay.TotalMilliseconds > 0)
+                {
+                    await Task.Delay(timeToDelay);
+                }
+                Console.WriteLine("Starting bucket: " + bucketTimestamp);
                 tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString));
-                await Task.Delay(15000);
-                Console.WriteLine("Ending Delay: " + bucket.First().Events.First().Timestamp);
+                Console.WriteLine("Ending Delay: " + bucketTimestamp);
             }
 
             Console.WriteLine("Waiting for unfinished executions to complete...");
