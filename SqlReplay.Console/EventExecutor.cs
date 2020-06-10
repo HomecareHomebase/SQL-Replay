@@ -37,21 +37,18 @@
                                 {
                                     try
                                     {
-                                        await RetryDeadlock(async () =>
-                                        {
-                                            using (var transactionScope = new TransactionScope(
-                                                TransactionScopeOption.Required,
-                                                new TransactionOptions()
-                                                {
-                                                    IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                                    Timeout = TimeSpan.FromSeconds(3600)
-                                                },
-                                                TransactionScopeAsyncFlowOption.Enabled))
+                                        using (var transactionScope = new TransactionScope(
+                                            TransactionScopeOption.Required,
+                                            new TransactionOptions()
                                             {
-                                                await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, connectionString);
-                                                transactionScope.Complete();
-                                            }
-                                        });
+                                                IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
+                                                Timeout = TimeSpan.FromSeconds(3600)
+                                            },
+                                            TransactionScopeAsyncFlowOption.Enabled))
+                                        {
+                                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, connectionString);
+                                            transactionScope.Complete();
+                                        }
                                     }
                                     catch (TransactionAbortedException)
                                     {
@@ -217,19 +214,22 @@
                         commandText = rpc.Statement;
                         commandType = CommandType.Text;
                     }
-                    using (var sqlConnection = new SqlConnection(connectionString))
+                    await RetryDeadlock(async () =>
                     {
-                        await sqlConnection.OpenAsync();
-                        using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                        using (var sqlConnection = new SqlConnection(connectionString))
                         {
-                            CommandType = commandType,
-                            CommandTimeout = 1800
-                        })
-                        {
-                            SetupSqlCommandParameters(sqlCommand, rpc);
-                            await sqlCommand.ExecuteNonQueryAsync();
+                            await sqlConnection.OpenAsync();
+                            using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
+                            {
+                                CommandType = commandType,
+                                CommandTimeout = 1800
+                            })
+                            {
+                                SetupSqlCommandParameters(sqlCommand, rpc);
+                                await sqlCommand.ExecuteNonQueryAsync();
+                            }
                         }
-                    }
+                    });
                 }
                 else if (evt is BulkInsert bulkInsert)
                 {
@@ -265,21 +265,24 @@
                     {
                         options = SqlBulkCopyOptions.Default;
                     }
-                    using (var sqlConnection = new SqlConnection(connectionString))
+                    await RetryDeadlock(async () =>
                     {
-                        await sqlConnection.OpenAsync();
-                        using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null) {BulkCopyTimeout = 1800})
+                        using (var sqlConnection = new SqlConnection(connectionString))
                         {
-                            bulkCopy.DestinationTableName = bulkInsert.Table;
-                            foreach (DataColumn column in dataTable.Columns)
+                            await sqlConnection.OpenAsync();
+                            using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null)
+                                {BulkCopyTimeout = 1800})
                             {
-                                bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName,
-                                    column.ColumnName));
+                                bulkCopy.DestinationTableName = bulkInsert.Table;
+                                foreach (DataColumn column in dataTable.Columns)
+                                {
+                                    bulkCopy.ColumnMappings.Add(new SqlBulkCopyColumnMapping(column.ColumnName,
+                                        column.ColumnName));
+                                }
+                                await bulkCopy.WriteToServerAsync(dataTable);
                             }
-
-                            await bulkCopy.WriteToServerAsync(dataTable);
                         }
-                    }
+                    });
                 }
             }
         }
@@ -293,12 +296,29 @@
                 {
                     return func();
                 }
-                catch (SqlException ex) when (ex.Number == 1205)
+                catch (Exception ex)
                 {
-                    tries++;
+                    if (HasDeadlock(ex))
+                    {
+                        tries++;
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
             }
             return Task.CompletedTask;
+        }
+
+        private bool HasDeadlock(Exception ex)
+        {
+            if (ex is SqlException sqlEx && sqlEx.Errors.Cast<SqlError>().Any(e =>
+                e.Number == 1205 || (e.Number == 50000 && e.Message.Contains("deadlock"))))
+            {
+                return true;
+            }
+            return ex.InnerException != null && HasDeadlock(ex.InnerException);
         }
 
         private void SetupSqlCommandParameters(SqlCommand cmd, Rpc rpc)
