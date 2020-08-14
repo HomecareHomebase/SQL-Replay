@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Data.SqlClient;
+using System.Text.RegularExpressions;
 
 namespace SqlReplay.Console
 {
@@ -21,6 +22,7 @@ namespace SqlReplay.Console
             string outputDirectory;
             short clients;
             string filePath;
+            string outputFilePath;
             int durationInMinutes;
             string storedProcedureNames;
             string cs;
@@ -31,9 +33,9 @@ namespace SqlReplay.Console
                     inputDirectory = args[1];
                     outputDirectory = args[2];
                     clients = short.Parse(args[3]);
-                    string connectionString = args[4];
+                    cs = args[4];
 
-                    await Prep(Directory.GetFiles(inputDirectory), outputDirectory, clients, connectionString);
+                    await Prep(Directory.GetFiles(inputDirectory), outputDirectory, clients, cs);
                     break;
                 case "prepnosc":
                     outputDirectory = args[1];
@@ -78,9 +80,15 @@ namespace SqlReplay.Console
                     break;
                 case "output":
                     inputDirectory = args[1];
-                    string outputFilePath = args[2];
+                    outputFilePath = args[2];
                     storedProcedureNames = args[3];
                     await Output(Directory.GetFiles(inputDirectory), outputFilePath, storedProcedureNames.Split(','));
+                    break;
+                case "convert":
+                    filePath = args[1];
+                    outputFilePath = args[2];
+                    cs = args[3];
+                    await Convert(filePath, outputFilePath, cs);
                     break;
             }
         }
@@ -187,6 +195,31 @@ namespace SqlReplay.Console
                         mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault())).ToArray());
             }
             await File.WriteAllTextAsync(outputFilePath, JsonConvert.SerializeObject(events.OrderBy(e => e.EventSequence)));
+        }
+
+        internal static async Task Convert(string filePath, string outputFilePath, string connectionString)
+        {
+            List<Rpc> rpcs = new List<Rpc>();
+            PreProcessor preProcessor = new PreProcessor();
+            using (var con = new SqlConnection(connectionString))
+            {
+                await con.OpenAsync();
+                using (var reader = new StreamReader(filePath))
+                {
+                    await reader.ReadLineAsync(); //skip header
+                    while (!reader.EndOfStream)
+                    {
+                        string statement = await reader.ReadLineAsync();
+                        Rpc rpc = new Rpc
+                        {
+                            Statement = statement.TrimStart('"').TrimEnd('"')
+                        };
+                        preProcessor.LoadParameters(con, rpc);
+                        rpcs.Add(rpc);
+                    }
+                }
+            }
+            await File.WriteAllTextAsync(outputFilePath, JsonConvert.SerializeObject(rpcs));
         }
 
         private static async Task<Run> DeserializeRun(string filePath)
