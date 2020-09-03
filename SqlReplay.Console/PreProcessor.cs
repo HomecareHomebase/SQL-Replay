@@ -278,10 +278,20 @@
                     {
                         if (rpcParam.SqlDbType == SqlDbType.Xml)
                         {
-                            string xmlConvert = rpc.Statement.Substring(rpc.Statement.IndexOf($"set {value}=", StringComparison.CurrentCulture)).GetParenthesesContent();
-                            int xmlBegin = xmlConvert.IndexOf('\'');
-                            string xmlContent = xmlConvert.Substring(xmlBegin + 1, xmlConvert.Length - xmlBegin - 2);
-                            rpcParam.Value = xmlContent;// new SqlXml(new MemoryStream(Encoding.UTF8.GetBytes(xmlContent)));
+                            string xmlConvert = rpc.Statement
+                                .Substring(rpc.Statement.IndexOf($"set {value}=", StringComparison.CurrentCulture))
+                                .GetParenthesesContent(out var skipConvert);
+
+                            if (!skipConvert)
+                            {
+                                int xmlBegin = xmlConvert.IndexOf('\'');
+                                string xmlContent = xmlConvert.Substring(xmlBegin + 1, xmlConvert.Length - xmlBegin - 2);
+                                rpcParam.Value = xmlContent;// new SqlXml(new MemoryStream(Encoding.UTF8.GetBytes(xmlContent)));
+                            }
+                            else
+                            {
+                                rpcParam.Value = xmlConvert;
+                            }
                         }
                         else if (rpcParam.SqlDbType == SqlDbType.Structured)
                         {
