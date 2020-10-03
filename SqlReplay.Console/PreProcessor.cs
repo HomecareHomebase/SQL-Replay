@@ -167,7 +167,13 @@
                 (!rpc.Statement.Contains('@') && Regex.IsMatch(rpc.Statement, @" [0-9]")))
             {
                 return;
-            }          
+            }
+
+            if (rpc.Statement == string.Empty)
+            {
+                rpc.Procedure = rpc.ObjectName;
+                return;
+            }
 
             string execStatement;
             if (!rpc.Statement.StartsWith("exec "))
