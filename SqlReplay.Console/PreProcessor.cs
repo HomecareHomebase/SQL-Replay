@@ -80,6 +80,10 @@
                             };
 
                             bulkInsert.Table = bulkInsert.BatchText.Split(' ')[2];
+                            if (bulkInsert.Table.Contains('('))
+                            {
+                                bulkInsert.Table = bulkInsert.Table.Substring(0, bulkInsert.Table.IndexOf('('));
+                            }
                             string[] columns = bulkInsert.BatchText.GetParenthesesContent().Split(", ");
                             foreach (string col in columns)
                             {
@@ -160,11 +164,11 @@
         internal void LoadParameters(SqlConnection con, Rpc rpc)
         {
             //We are not handling creating parameters for dynamic SQL or anything without named parameters - these will be executed just as unparameterized statements
-            if (rpc.ObjectName == "sp_prepexec" || rpc.ObjectName == "sp_prepexecrpc" || rpc.ObjectName == "sp_executesql" ||
+            if (rpc.ObjectName == "sp_prepexec" || rpc.ObjectName == "sp_prepexecrpc" || rpc.ObjectName == "sp_executesql" || rpc.ObjectName == "sp_prepare" ||
                 (rpc.Statement.IndexOf('\'') >= 0 && rpc.Statement.IndexOf('\'') < rpc.Statement.IndexOf('@')) ||
                 (rpc.Statement.IndexOf('=') >= 0 && rpc.Statement.IndexOf('=') < rpc.Statement.IndexOf('@')) ||
                 (rpc.Statement.Contains(',') && !rpc.Statement.Contains('@')) ||
-                (!rpc.Statement.Contains('@') && Regex.IsMatch(rpc.Statement, @" [0-9]")))
+                (!rpc.Statement.Contains('@') && Regex.IsMatch(rpc.Statement, @" [a-zA-Z0-9]")))
             {
                 return;
             }
