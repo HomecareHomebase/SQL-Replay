@@ -5,6 +5,7 @@
     using System.Threading.Tasks;
     using System.Linq;
     using System.Data;
+    using Microsoft.Extensions.Configuration;
 
     public class Runner
     {
@@ -105,6 +106,12 @@
 
         private async Task RunEventsAsync(Run run)
         {
+            var config = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .Build();
+
+            IRunnerSettings runnerSettings = config.GetSection(nameof(RunnerSettings)).Get<RunnerSettings>();
+          
             Console.WriteLine("Warming up thread pool...");
 
             System.Threading.ThreadPool.SetMaxThreads(32767, 32767);
@@ -152,7 +159,7 @@
             var buckets = run.Sessions.GroupBy(s => 
             {
                 Event firstEvt = s.Events.First();
-                return firstEvt.Timestamp.ToString("ddhhmm") + firstEvt.Timestamp.Second / 15;         
+                return firstEvt.Timestamp.ToString("ddhhmm") + firstEvt.Timestamp.Second / runnerSettings.BucketInterval;         
             })
             .OrderBy(g => g.Key)
             .Select(g => g.OrderBy(s => s.Events.First().Timestamp)
@@ -174,7 +181,7 @@
                     await Task.Delay(timeToDelay);
                 }
                 Console.WriteLine("Starting bucket: " + bucketTimestamp);
-                tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString));
+                tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString, runnerSettings));
                 Console.WriteLine("Ending Delay: " + bucketTimestamp);
             }
 

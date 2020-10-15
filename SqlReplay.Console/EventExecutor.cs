@@ -9,11 +9,11 @@
     using Microsoft.SqlServer.Server;
     using System.Transactions;
 
-    public class EventExecutor
+    internal class EventExecutor
     {       
         public List<Exception> Exceptions { get; set; } = new List<Exception>();
 
-        public async Task ExecuteSessionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, IEnumerable<Session> sessions, string connectionString)
+        public async Task ExecuteSessionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, IEnumerable<Session> sessions, string connectionString, IRunnerSettings runnerSettings)
         {
             List<Task> sessionTasks = new List<Task>();
             foreach (var session in sessions)
@@ -42,11 +42,11 @@
                                             new TransactionOptions()
                                             {
                                                 IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                                Timeout = TimeSpan.FromSeconds(3600)
+                                                Timeout = TimeSpan.FromSeconds(runnerSettings.TransactionScopeTimeout)
                                             },
                                             TransactionScopeAsyncFlowOption.Enabled))
                                         {
-                                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, connectionString);
+                                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, transaction, connectionString, runnerSettings);
                                             transactionScope.Complete();
                                         }
                                     }
@@ -84,7 +84,7 @@
                                             using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
                                             {
                                                 CommandType = commandType,
-                                                CommandTimeout = 1800
+                                                CommandTimeout = runnerSettings.SqlCommandTimeout
                                             })
                                             {
                                                 SetupSqlCommandParameters(sqlCommand, rpc);
@@ -140,7 +140,7 @@
                                         {
                                             await sqlConnection.OpenAsync();
                                             using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null)
-                                                {BulkCopyTimeout = 1800})
+                                                {BulkCopyTimeout = runnerSettings.BulkCopyTimeout})
                                             {
                                                 bulkCopy.DestinationTableName = bulkInsert.Table;
                                                 foreach (DataColumn column in dataTable.Columns)
@@ -169,7 +169,7 @@
             Console.WriteLine("Ending bucket: " + sessions.First().Events.First().Timestamp);
         }
 
-        private async Task ExecuteTransactionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, Transaction transaction, string connectionString)
+        private async Task ExecuteTransactionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, Transaction transaction, string connectionString, IRunnerSettings runnerSettings)
         {
             foreach (var evt in transaction.Events)
             {
@@ -187,11 +187,11 @@
                             new TransactionOptions()
                             {
                                 IsolationLevel = System.Transactions.IsolationLevel.ReadUncommitted,
-                                Timeout = TimeSpan.FromSeconds(3600)
+                                Timeout = TimeSpan.FromSeconds(runnerSettings.TransactionScopeTimeout)
                             },
                             TransactionScopeAsyncFlowOption.Enabled))
                         {
-                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, nestedTransaction, connectionString);
+                            await ExecuteTransactionEventsAsync(eventCaptureOrigin, replayOrigin, nestedTransaction, connectionString, runnerSettings);
                             nestedTransactionScope.Complete();
                         }
                     }
@@ -222,7 +222,7 @@
                             using (var sqlCommand = new SqlCommand(commandText, sqlConnection)
                             {
                                 CommandType = commandType,
-                                CommandTimeout = 1800
+                                CommandTimeout = runnerSettings.SqlCommandTimeout
                             })
                             {
                                 SetupSqlCommandParameters(sqlCommand, rpc);
@@ -271,7 +271,7 @@
                         {
                             await sqlConnection.OpenAsync();
                             using (var bulkCopy = new SqlBulkCopy(sqlConnection, options, null)
-                                {BulkCopyTimeout = 1800})
+                                {BulkCopyTimeout = runnerSettings.BulkCopyTimeout})
                             {
                                 bulkCopy.DestinationTableName = bulkInsert.Table;
                                 foreach (DataColumn column in dataTable.Columns)
