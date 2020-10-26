@@ -202,3 +202,45 @@ The first file path is the path to the flat file of exec statements. The first l
 Next is a file path for the JSON file you want to output.
 
 Last is a connection string to a database that matches the one you plan to test against in terms of code signatures. This will be used to determine appropriate types for parameters.
+
+## Supported SQL types for Bulk Insert events
+* BIGINT
+* NUMERIC (use SqlDbType.Decimal)
+* BIT
+* SMALLINT
+* DECIMAL
+* SMALLMONEY
+* INT
+* TINYINT
+* MONEY
+* FLOAT
+* REAL
+* DATE
+* DATETIMEOFFSET
+* DATETIME2
+* SMALLDATETIME
+* DATETIME
+* TIME
+* CHAR
+* VARCHAR
+* TEXT
+* NCHAR
+* NVARCHAR
+* NTEXT
+* BINARY
+* VARBINARY
+* IMAGE
+* UNIQUEIDENTIFIER
+* SQL_VARIANT
+* XML
+
+### Limitations
+* The range of values for SQL Decimal/Numeric columns is much smaller than SQL server supports. It is limited by the size of the C# decimal type to `-79,228,162,514,264,337,593,543,950,335` to `79,228,162,514,264,337,593,543,950,335` (a little smaller than the equivalent of `DECIMAL(29,0)`).
+
+### Unsupported types
+* ROWVERSION - This is not supported by SQL server for bulk inserts
+* CURSOR - this is not supported by SQL server as a column type
+* TABLE - this is not supported by SQL server as a column type
+* GEOMETRY - this is not yet officially supported by .net core, though there are [potential workarounds](https://github.com/dotnet/SqlClient/issues/30)
+* GEOGRAPHY - this is not yet officially supported by .net core, though there are [potential workarounds](https://github.com/dotnet/SqlClient/issues/30)
+* HIERARCHYID - this is not yet officially supported by .net core, though there are [potential workarounds](https://github.com/dotnet/SqlClient/issues/30)
