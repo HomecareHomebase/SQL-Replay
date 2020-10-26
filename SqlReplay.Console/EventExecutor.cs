@@ -419,6 +419,10 @@
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(int) };
             }
+            else if (column.SqlDbType.ToString().Contains("Binary") || column.SqlDbType.ToString().Contains("Image"))
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(byte[]) };
+            }                    
             else if (column.SqlDbType.ToString().Contains("Text") || column.SqlDbType.ToString().Contains("Char"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
@@ -427,17 +431,37 @@
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(bool) };
             }
-            else if (column.SqlDbType.ToString().Contains("Date") || column.SqlDbType.ToString().Contains("Time"))
+            else if (column.SqlDbType.ToString().Contains("DateTimeOffset"))
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(DateTimeOffset) };
+            }
+            else if (column.SqlDbType.ToString().Contains("Date"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(DateTime) };
+            }
+            else if (column.SqlDbType.ToString().Contains("Time"))
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(TimeSpan) };
             }
             else if (column.SqlDbType.ToString().Contains("Decimal") || column.SqlDbType.ToString().Contains("Money"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(decimal) };
             }
-            else if (column.SqlDbType.ToString().Contains("Float"))
+            else if (column.SqlDbType.ToString().Contains("Float") || column.SqlDbType.ToString().Contains("Real"))
             {
                 return new DataColumn { ColumnName = columnName, DataType = typeof(double) };
+            }
+            else if (column.SqlDbType.ToString().Contains("UniqueIdentifier"))
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(Guid) };
+            }
+            else if (column.SqlDbType.ToString().Contains("Variant"))
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(object) };
+            }
+            else if (column.SqlDbType.ToString().Contains("Xml"))
+            {
+                return new DataColumn { ColumnName = columnName, DataType = typeof(string) };
             }
             else
             {
