@@ -159,7 +159,7 @@
             var buckets = run.Sessions.GroupBy(s => 
             {
                 Event firstEvt = s.Events.First();
-                return firstEvt.Timestamp.ToString("ddhhmm") + firstEvt.Timestamp.Second / runnerSettings.BucketInterval;         
+                return firstEvt.Timestamp.ToString("ddHHmm") + firstEvt.Timestamp.Second / runnerSettings.BucketInterval;         
             })
             .OrderBy(g => g.Key)
             .Select(g => g.OrderBy(s => s.Events.First().Timestamp)
