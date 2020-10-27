@@ -193,6 +193,11 @@ namespace SqlReplay.Console
                 events.AddRange(run.Sessions.SelectMany(s => s.Events)
                     .Where(e => matchCriteria.Any(
                         mc => ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase)).GetValueOrDefault())).ToArray());
+                foreach (var evt in events)
+                {
+                    ((Rpc) evt).TimeElapsedInMilliseconds =
+                        (int)evt.Timestamp.Subtract(run.EventCaptureOrigin).TotalMilliseconds;
+                }
             }
             await File.WriteAllTextAsync(outputFilePath, JsonConvert.SerializeObject(events.OrderBy(e => e.EventSequence)));
         }

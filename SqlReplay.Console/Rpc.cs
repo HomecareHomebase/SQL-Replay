@@ -13,5 +13,7 @@
         public string Procedure { get; set; }
         [JsonProperty("p")]
         public List<Parameter> Parameters { get; set; } = new List<Parameter>();
+        [JsonProperty("t")]
+        public int TimeElapsedInMilliseconds { get; set; }
     }
 }
