@@ -456,6 +456,7 @@
                 case SqlDbType.NVarChar:
                 case SqlDbType.Text:
                 case SqlDbType.NText:
+                case SqlDbType.Variant:
                     return value;
                 case SqlDbType.Decimal:
                 case SqlDbType.Money:
