@@ -1,0 +1,22 @@
+{
+  "replayConsolePath": "C:\\tmp\\replay\\SqlReplay.Console.dll",
+  "connectionString": "DB connection string",
+  "outputPath": "D:\\tmp\\replay\\output",
+  "statusCheckIntervalInSec": 15,
+  "batches": [
+    {
+      "processingOrder": 1,
+      "batchId": "XECapture_1",
+      "numOfInstances": 10,
+      "startAt": "10/07/2020 02:53:07 PM -04:00",
+      "durationInMinutes": 0
+    },
+    {
+      "processingOrder": 2,
+      "batchId": "XECapture_2",
+      "numOfInstances": 10,
+      "startAt": "10/07/2020 10:31:33 PM -04:00",
+      "durationInMinutes": 0
+    }
+  ]
+}
