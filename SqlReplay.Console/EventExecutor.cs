@@ -11,7 +11,7 @@
 
     internal class EventExecutor
     {       
-        public List<Exception> Exceptions { get; set; } = new List<Exception>();
+        public List<TimestampedException> Exceptions { get; set; } = new List<TimestampedException>();
 
         public async Task ExecuteSessionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, IEnumerable<Session> sessions, string connectionString, IRunnerSettings runnerSettings)
         {
@@ -56,7 +56,7 @@
                                     }
                                     catch (Exception ex)
                                     {
-                                        this.Exceptions.Add(ex);
+                                        this.Exceptions.Add(new TimestampedException(ex));
                                     }
                                 }
                             }
@@ -95,7 +95,7 @@
                                 }
                                 catch (Exception ex)
                                 {
-                                    this.Exceptions.Add(ex);
+                                    this.Exceptions.Add(new TimestampedException(ex));
                                 }
                             }
                             else if (evt is BulkInsert bulkInsert)
@@ -157,7 +157,7 @@
                                 }
                                 catch (Exception ex)
                                 {
-                                    this.Exceptions.Add(ex);
+                                    this.Exceptions.Add(new TimestampedException(ex));
                                 }
                             }
                         }));
@@ -467,6 +467,6 @@
             {
                 throw new Exception(column.SqlDbType + " is not a supported data type.");
             }
-        }      
+        }
     }
 }

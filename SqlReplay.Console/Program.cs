@@ -149,7 +149,7 @@ namespace SqlReplay.Console
             using (StreamWriter writer = new StreamWriter(logFilePath, false))
             {
                 await writer.WriteLineAsync($"{runner.Exceptions.Count} exceptions captured");
-                foreach (Exception ex in runner.Exceptions)
+                foreach (var ex in runner.Exceptions)
                 {
                     await writer.WriteLineAsync(ex.ToString());
                 }
@@ -171,7 +171,7 @@ namespace SqlReplay.Console
             using (StreamWriter writer = new StreamWriter(logFilePath, false))
             {
                 await writer.WriteLineAsync($"{runner.Exceptions.Count} exceptions captured");
-                foreach (Exception ex in runner.Exceptions)
+                foreach (var ex in runner.Exceptions)
                 {
                     await writer.WriteLineAsync(ex.ToString());
                 }

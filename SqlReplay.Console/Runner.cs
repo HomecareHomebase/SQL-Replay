@@ -9,7 +9,7 @@
 
     public class Runner
     {
-        public List<Exception> Exceptions { get; set; } = new List<Exception>();
+        public List<TimestampedException> Exceptions { get; set; } = new List<TimestampedException>();
 
         public Task WarmupAsync(Run run, int durationInMinutes, string[] storedProcedureNamesToInclude)
         {
