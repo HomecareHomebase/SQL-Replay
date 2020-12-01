@@ -24,7 +24,7 @@ namespace SqlReplay.Console.CustomPreProcessing
         public CustomPreProcessor(int numberOfSessions, DateTime startDateTime, String storedProcName, String jsonParameterFilePath, int? runTimeInHours)
         {
             totalSessions = numberOfSessions;
-            this.startDateTime = new DateTimeOffset(startDateTime, new TimeSpan(1, 0, 0));
+            this.startDateTime = new DateTimeOffset(startDateTime, new TimeSpan(0, 0, 0));
             this.storedProcedureName = storedProcName;
             this.jsonParameterFilePath = jsonParameterFilePath;
             eventTimeOffset = (double)(secondsPerHour * (runTimeInHours ?? defaultRunTimeInHours)) / numberOfSessions;
