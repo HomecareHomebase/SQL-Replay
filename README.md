@@ -40,7 +40,7 @@ The custom preprocessing feature generates a file of serialized objects comprise
 In order to generate custom file, execute the SQL Replay tool from the command-line using the prepnosc parameter.
 
 ```
-SqlReplay.Console.exe prepnosc "C:\capture\" 1 155 "3/2/2020 7:30:00" "dbo.yourStoredProc" "C:\capture\params.json" 2
+SqlReplay.Console.exe prepnosc "C:\capture\" 1 155 "9/28/2020 10:01:50" "dbo.yourStoredProc" "C:\capture\params.json" 2
 ```
 
 The first argument is the file path of the location at which the resulting file will be saved.
@@ -49,7 +49,7 @@ The second argument is the number Of Binary Files. The resulting output can be s
 
 The third argument is the number of sessions to generate for the testing duration. Currently, the custom preprocessor only creates one event per session, so this can also be seen as the number of times your stored procedure will be called throughout the duration of testing (e.g. I want my proc called 400 times per hour during a 2 hour test, therefore the number of session I would like generated is 800).
 
-The fourth argument is the start DateTime, the date and time in which the first event should be executed in a format that can be parsed as a valid DateTime value (e.g. "3/2/2020 7:30:00").
+The fourth argument is the start DateTime, the date and time in which the first event should be executed in a format that can be parsed as a valid DateTime value (e.g. "9/28/2020 10:01:50").
 
 The fifth argument is the stored procedure name to be tested, with schema (e.g. “dbo.yourprocname").
 
