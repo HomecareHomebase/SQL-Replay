@@ -92,11 +92,12 @@
             {                
                 session.Events.RemoveAll(e => 
                 {
-                    if (e is Rpc rpc)
+                    if (e is Rpc rpc && rpc.Statement != null)
                     {
                         return rpc.Statement.Contains("OPENROWSET", StringComparison.CurrentCultureIgnoreCase) ||
                                 rpc.Statement.Contains("OPENDATASOURCE", StringComparison.CurrentCultureIgnoreCase);
                     }
+
                     return false;
                 });
             }
