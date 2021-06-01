@@ -1,5 +1,6 @@
 ﻿using System.Data.SqlClient;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace SqlReplay.Console
 {
@@ -111,26 +112,11 @@ namespace SqlReplay.Console
 
         internal static async Task ProcessPrep(Run run, string outputDirectory, int clients, string connectionString)
         {
-            Run[] runs = new Run[clients];
-            for (var i = 0; i < clients; ++i)
+            var binaryFormatter = new BinaryFormatter();
+            for (var i = 0; i < run.Sessions.Count; i++)
             {
-                runs[i] = new Run { Sessions = new List<Session>(), ConnectionString = connectionString, EventCaptureOrigin = run.EventCaptureOrigin };
-            }
-
-            for (var i = 0; i < run.Sessions.Count; ++i)
-            {
-                var bucket = i % clients;
-                runs[bucket].Sessions.Add(run.Sessions[i]);
-            }
-
-            var formatter = new BinaryFormatter();
-            for (var i = 0; i < clients; ++i)
-            {
-                using (var stream = new MemoryStream())
-                {
-                    formatter.Serialize(stream, runs[i]);
-                    await File.WriteAllBytesAsync($@"{outputDirectory}\replay{i}.txt", stream.ToArray());
-                }
+                using var fileStream = new FileStream($@"{outputDirectory}\replay{i % clients}.txt", FileMode.Append);
+                binaryFormatter.Serialize(fileStream, run.Sessions[i]);
             }
         }
 
@@ -229,13 +215,19 @@ namespace SqlReplay.Console
 
         private static async Task<Run> DeserializeRun(string filePath)
         {
-            Run run;
             var formatter = new BinaryFormatter();
-            using (var stream = new MemoryStream(await File.ReadAllBytesAsync(filePath)))
+            var sessions = new List<Session>();
+            using var stream = new FileStream(filePath, FileMode.Open);
+            while (stream.Position < stream.Length)
             {
-                run = (Run)formatter.Deserialize(stream);
+                sessions.Add((Session)formatter.Deserialize(stream));
             }
-            return run;
+
+            return new Run
+            {
+                Sessions = sessions,
+                EventCaptureOrigin = sessions.First().Events.OrderBy(e => e.EventSequence).ToList().First().Timestamp
+            };
         }
     }
 }
