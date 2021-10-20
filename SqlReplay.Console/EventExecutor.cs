@@ -405,17 +405,18 @@ namespace SqlReplay.Console
         /// <summary>
         /// Converts special case input into appropriate SQL values. See Remarks.
         /// </summary>
-        /// <param name="value">The unconverted parameter value to send to SQL</param>
+        /// <param name="inputValue">The unconverted parameter value to send to SQL</param>
         /// <param name="sqlDbType">The SQL Type of the parameter</param>
-        /// <returns>A special default value if <paramref name="value"/> is "" and <paramref name="sqlDbType"/> is
-        /// SqlDbType.Int or DateTime; otherwise, <paramref name="value"/></returns>
+        /// <returns>A special default value if <paramref name="inputValue"/> is "" and <paramref name="sqlDbType"/> is
+        /// SqlDbType.Int or DateTime; otherwise, <paramref name="inputValue"/></returns>
         /// <remarks>
         /// <para>This oddball little method is required because some of our executions pass '' (empty string) to sproc
         /// parameters of type INT or DATETIME. In SQL-Replay, though, ADO.Net is intercepting those executions
         /// and complaining that "" doesn't convert to an Int32.
         /// To limit risk exposure, this method is very tightly scoped to address only these two known occurring
         /// problems.</para>
-        /// <para>Try this fun SQL out for a demo of what kind of type wrangling SQL allows when .NET isn't mediating:</para>
+        /// <para>Try this fun SQL out for a demo of what kind of type wrangling SQL allows when .NET isn't
+        /// mediating:</para>
         /// <code>
         /// DECLARE @defaultInt INT, @emptyStringInt INT = '', @oneSpaceInt INT = ' ', @twoSpaceInt INT = '  '
         /// DECLARE @defaultdt DATETIME, @emptyStringDt DATETIME = '', @oneSpaceDt DATETIME = ' ', @twoSpaceDt DATETIME = '  '
@@ -432,14 +433,14 @@ namespace SqlReplay.Console
         /// DECLARE @alphaDt DATETIME = 'abc'
         /// </code>
         /// </remarks>
-        private static object SqlTypifyValue(object value, SqlDbType sqlDbType)
+        private static object SqlTypifyValue(object inputValue, SqlDbType sqlDbType)
         {
             return sqlDbType switch
             {
-                SqlDbType.Int when value is "" => 0,
-                SqlDbType.DateTime when value is "" => DateTime.Parse("1900-01-01 00:00:00.000",
+                SqlDbType.Int when inputValue is "" => 0,
+                SqlDbType.DateTime when inputValue is "" => DateTime.Parse("1900-01-01 00:00:00.000",
                     CultureInfo.InvariantCulture),
-                _ => value
+                _ => inputValue
             };
         }
 
