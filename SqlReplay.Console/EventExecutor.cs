@@ -1,10 +1,9 @@
-﻿using System.Globalization;
-
-namespace SqlReplay.Console
+﻿namespace SqlReplay.Console
 {
     using System;
     using System.Threading.Tasks;
     using System.Data.SqlClient;
+    using System.Globalization;
     using System.Collections.Generic;
     using System.Linq;
     using System.Data;
