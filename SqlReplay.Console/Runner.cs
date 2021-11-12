@@ -168,12 +168,9 @@
                 .ToList()
             ).ToList();
 
-            // "say hello" to SQL. Warm up connections
-            var i = SqlConnect
-
             // Delay start time to sync across processes
             var pStartTime = Process.GetCurrentProcess().StartTime;
-            await Task.Delay(pStartTime.AddMinutes(10) - DateTime.UtcNow);
+            await Task.Delay(pStartTime.AddMinutes(runnerSettings.StartDelayMinutes) - DateTime.UtcNow);
 
             Console.WriteLine(DateTime.Now + " - Kicking off executions...");
 
