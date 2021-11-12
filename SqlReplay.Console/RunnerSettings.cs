@@ -14,5 +14,8 @@ namespace SqlReplay.Console
 
         /// <inheritdoc />
         public int BucketInterval { get; set; } = 15;
+
+        /// <inheritdoc />
+        public int StartDelayMinutes { get; set; } = 10;
     }
 }
