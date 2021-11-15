@@ -169,8 +169,8 @@
             ).ToList();
 
             // Delay start time to sync across processes
-            var pStartTime = Process.GetCurrentProcess().StartTime;
-            await Task.Delay(pStartTime.AddMinutes(runnerSettings.StartDelayMinutes) - DateTime.UtcNow);
+            var pStartTime = Process.GetCurrentProcess().StartTime; // local time
+            await Task.Delay(pStartTime.AddMinutes(runnerSettings.StartDelayMinutes) - DateTime.Now);
 
             Console.WriteLine(DateTime.Now + " - Kicking off executions...");
 
