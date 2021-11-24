@@ -170,7 +170,17 @@
 
             // Delay start time to sync across processes
             var pStartTime = Process.GetCurrentProcess().StartTime; // local time
-            await Task.Delay(pStartTime.AddMinutes(runnerSettings.StartDelayMinutes) - DateTime.Now);
+            TimeSpan delay = pStartTime.AddMinutes(runnerSettings.StartDelayMinutes) - DateTime.Now;
+            try
+            {
+                await Task.Delay(delay);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+
+                Console.WriteLine(DateTime.Now + $" - Syncing delay failed to negative delay TimeSpan of {delay.TotalMilliseconds} ms. Process Start time: {pStartTime}");
+            }
+
 
             Console.WriteLine(DateTime.Now + " - Kicking off executions...");
 
