@@ -175,10 +175,9 @@
             {
                 await Task.Delay(delay);
             }
-            catch (ArgumentOutOfRangeException ex)
+            catch (ArgumentOutOfRangeException)
             {
-
-                Console.WriteLine(DateTime.Now + $" - Syncing delay failed to negative delay TimeSpan of {delay.TotalMilliseconds} ms. Process Start time: {pStartTime}");
+                Console.WriteLine(DateTime.Now + $" - Syncing delay failed due to negative delay TimeSpan of {delay.TotalMilliseconds} ms. Process Start time: {pStartTime}");
             }
 
 
