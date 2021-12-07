@@ -113,6 +113,16 @@ namespace SqlReplay.Console
         internal static async Task ProcessPrep(Run run, string outputDirectory, int clients, string connectionString)
         {
             var binaryFormatter = new BinaryFormatter();
+            for (var i = 0; i < clients; i++)
+            {
+                using var fileStream = new FileStream($@"{outputDirectory}\replay{i}.txt", FileMode.Append);
+                binaryFormatter.Serialize(fileStream, connectionString);
+            }
+            for (var i = 0; i < clients; i++)
+            {
+                using var fileStream = new FileStream($@"{outputDirectory}\replay{i}.txt", FileMode.Append);
+                binaryFormatter.Serialize(fileStream, run.EventCaptureOrigin);
+            }
             for (var i = 0; i < run.Sessions.Count; i++)
             {
                 using var fileStream = new FileStream($@"{outputDirectory}\replay{i % clients}.txt", FileMode.Append);
@@ -216,17 +226,19 @@ namespace SqlReplay.Console
         private static async Task<Run> DeserializeRun(string filePath)
         {
             var formatter = new BinaryFormatter();
-            var sessions = new List<Session>();
             using var stream = new FileStream(filePath, FileMode.Open);
+            var connectionString = (string) formatter.Deserialize(stream);
+            var eventCaptureOrigin = (DateTimeOffset) formatter.Deserialize(stream);
+            var sessions = new List<Session>();
             while (stream.Position < stream.Length)
             {
                 sessions.Add((Session)formatter.Deserialize(stream));
             }
-
             return new Run
             {
                 Sessions = sessions,
-                EventCaptureOrigin = sessions.First().Events.OrderBy(e => e.EventSequence).ToList().First().Timestamp
+                ConnectionString=connectionString,
+                EventCaptureOrigin = eventCaptureOrigin
             };
         }
     }
