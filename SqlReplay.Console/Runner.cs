@@ -156,7 +156,7 @@
                 session.Events = nestedEvents;
             }
 
-            Console.WriteLine(DateTime.Now + $" - Preparing {runnerSettings.BucketInterval} second buckets of sessions...");
+            Console.WriteLine($"{DateTime.Now} - Preparing {runnerSettings.BucketInterval} second buckets of sessions...");
             
             var buckets = run.Sessions.GroupBy(s => 
             {
@@ -177,7 +177,7 @@
             }
             catch (ArgumentOutOfRangeException)
             {
-                Console.WriteLine(DateTime.Now + $" - Syncing delay failed due to negative delay TimeSpan of {delay.TotalMilliseconds} ms. Process Start time: {pStartTime}");
+                Console.WriteLine($"{DateTime.Now} - Syncing delay failed due to negative delay TimeSpan of {delay.TotalMilliseconds} ms. Process Start time: {pStartTime}");
             }
 
 
@@ -195,7 +195,7 @@
                 {
                     await Task.Delay(timeToDelay);
                 }
-                Console.WriteLine(DateTime.Now + " - Starting bucket: " + bucketTimestamp + $" - timeToDelay = {timeToDelay}");
+                Console.WriteLine(DateTime.Now + $"{DateTime.Now} - Starting bucket: {bucketTimestamp} - timeToDelay = {timeToDelay}");
                 tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString, runnerSettings));
                 Console.WriteLine(DateTime.Now + " - Finished submitting bucket: " + bucketTimestamp);
             }
