@@ -114,12 +114,12 @@
 
             IRunnerSettings runnerSettings = config.GetSection(nameof(RunnerSettings)).Get<RunnerSettings>();
           
-            Console.WriteLine(DateTime.Now + " - Warming up thread pool...");
+            Console.WriteLine($"{DateTime.Now} - Warming up thread pool...");
 
             System.Threading.ThreadPool.SetMaxThreads(32767, 32767);
             System.Threading.ThreadPool.SetMinThreads(32767, 32767);
 
-            Console.WriteLine(DateTime.Now + " - Nesting events...");
+            Console.WriteLine($"{DateTime.Now} - Nesting events...");
 
             //Remove any sessions with no events
             run.Sessions.RemoveAll(s => s.Events.Count == 0);
@@ -181,7 +181,7 @@
             }
 
 
-            Console.WriteLine(DateTime.Now + " - Kicking off executions...");
+            Console.WriteLine($"{DateTime.Now} - Kicking off executions...");
 
             var tasks = new List<Task>();
             var eventExecutor = new EventExecutor();
@@ -195,14 +195,14 @@
                 {
                     await Task.Delay(timeToDelay);
                 }
-                Console.WriteLine(DateTime.Now + $"{DateTime.Now} - Starting bucket: {bucketTimestamp} - timeToDelay = {timeToDelay}");
+                Console.WriteLine($"{DateTime.Now} - Starting bucket: {bucketTimestamp} - timeToDelay = {timeToDelay}");
                 tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString, runnerSettings));
-                Console.WriteLine(DateTime.Now + " - Finished submitting bucket: " + bucketTimestamp);
+                Console.WriteLine($"{DateTime.Now} - Finished submitting bucket: {bucketTimestamp}");
             }
 
-            Console.WriteLine(DateTime.Now + " - Waiting for unfinished executions to complete...");
+            Console.WriteLine($"{DateTime.Now} - Waiting for unfinished executions to complete...");
             await Task.WhenAll(tasks);
-            Console.WriteLine(DateTime.Now + " - Executions complete.");
+            Console.WriteLine($"{DateTime.Now} - Executions complete.");
             this.Exceptions.AddRange(eventExecutor.Exceptions);
         }       
 
