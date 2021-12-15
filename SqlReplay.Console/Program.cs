@@ -12,6 +12,7 @@ namespace SqlReplay.Console
     using CustomPreProcessing;
     using System.Linq;
     using Newtonsoft.Json;
+    using System.Diagnostics;
 
     internal class Program
     {
@@ -154,11 +155,19 @@ namespace SqlReplay.Console
 
         internal static async Task Run(string filePath, DateTimeOffset restorePoint, int durationInMinutes, string[] storedProcedureNamesToExclude, string connectionString = null)
         {
+            // Warm up SQL connection pool
+            using (var conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+            }
+
+            Console.WriteLine(DateTime.Now + " - Starting to deserialize.");
             Run run = await DeserializeRun(filePath);            
             if (connectionString != null)
             {
                 run.ConnectionString = connectionString;
             }
+            Console.WriteLine(DateTime.Now + " - Completed deserializing.");
 
             var runner = new Runner();
             await runner.RunAsync(run, restorePoint, durationInMinutes, storedProcedureNamesToExclude);

@@ -17,6 +17,7 @@
         public async Task ExecuteSessionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, IEnumerable<Session> sessions, string connectionString, IRunnerSettings runnerSettings)
         {
             List<Task> sessionTasks = new List<Task>();
+            BucketStats stats = new BucketStats();
             foreach (var session in sessions)
             {
                 sessionTasks.Add(Task.Run(async () =>
@@ -31,6 +32,20 @@
                             {
                                 await Task.Delay(timeToDelay);
                             }
+                            else
+                            {
+                                stats.timesFellBehind++;
+                            }
+                            
+                            if (timeToDelay.TotalMilliseconds < stats.minDelayms)
+                            {
+                                stats.minDelayms = timeToDelay.TotalMilliseconds;
+                            }
+                            if (timeToDelay.TotalMilliseconds > stats.maxDelayms)
+                            {
+                                stats.maxDelayms = timeToDelay.TotalMilliseconds;
+                            }
+
                             if (evt is Transaction transaction)
                             {
                                 //Only pay attention to Begin as any Rollback at this level would not have a corresponding Begin
@@ -167,7 +182,8 @@
                 }));
             }
             await Task.WhenAll(sessionTasks);
-            Console.WriteLine("Ending bucket: " + sessions.First().Events.First().Timestamp);
+            Console.WriteLine(DateTime.Now + " - Ending bucket: " + sessions.First().Events.First().Timestamp);
+            Console.WriteLine(DateTime.Now + $" - Bucket Stats - TimesFellBehind={stats.timesFellBehind}, MinDelay={stats.minDelayms}, MaxDelay={stats.maxDelayms}, SessionCount={sessions.Count()}, EventCount={sessions.Sum(s => s.Events.Count())}");
         }
 
         private async Task ExecuteTransactionEventsAsync(DateTimeOffset eventCaptureOrigin, DateTimeOffset replayOrigin, Transaction transaction, string connectionString, IRunnerSettings runnerSettings)

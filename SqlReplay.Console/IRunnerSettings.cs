@@ -21,5 +21,10 @@
         /// Defines bucket interval used for grouping on sessions.
         /// </summary>
         int BucketInterval { get; set; }
+
+        /// <summary>
+        /// Defines time in minutes for the process to wait before starting. This helps keep processes in sync.
+        /// </summary>
+        public int StartDelayMinutes { get; set; }
     }
 }

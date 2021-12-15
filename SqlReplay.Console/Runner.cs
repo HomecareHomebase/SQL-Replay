@@ -6,6 +6,7 @@
     using System.Linq;
     using System.Data;
     using Microsoft.Extensions.Configuration;
+    using System.Diagnostics;
 
     public class Runner
     {
@@ -113,12 +114,12 @@
 
             IRunnerSettings runnerSettings = config.GetSection(nameof(RunnerSettings)).Get<RunnerSettings>();
           
-            Console.WriteLine("Warming up thread pool...");
+            Console.WriteLine($"{DateTime.Now} - Warming up thread pool...");
 
             System.Threading.ThreadPool.SetMaxThreads(32767, 32767);
             System.Threading.ThreadPool.SetMinThreads(32767, 32767);
 
-            Console.WriteLine("Nesting events...");
+            Console.WriteLine($"{DateTime.Now} - Nesting events...");
 
             //Remove any sessions with no events
             run.Sessions.RemoveAll(s => s.Events.Count == 0);
@@ -155,7 +156,7 @@
                 session.Events = nestedEvents;
             }
 
-            Console.WriteLine("Preparing 15 second buckets of sessions...");
+            Console.WriteLine($"{DateTime.Now} - Preparing {runnerSettings.BucketInterval} second buckets of sessions...");
             
             var buckets = run.Sessions.GroupBy(s => 
             {
@@ -166,8 +167,21 @@
             .Select(g => g.OrderBy(s => s.Events.First().Timestamp)
                 .ToList()
             ).ToList();
-           
-            Console.WriteLine("Kicking off executions...");
+
+            // Delay start time to sync across processes
+            var pStartTime = Process.GetCurrentProcess().StartTime; // local time
+            TimeSpan delay = pStartTime.AddMinutes(runnerSettings.StartDelayMinutes) - DateTime.Now;
+            try
+            {
+                await Task.Delay(delay);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                Console.WriteLine($"{DateTime.Now} - Syncing delay failed due to negative delay TimeSpan of {delay.TotalMilliseconds} ms. Process Start time: {pStartTime}");
+            }
+
+
+            Console.WriteLine($"{DateTime.Now} - Kicking off executions...");
 
             var tasks = new List<Task>();
             var eventExecutor = new EventExecutor();
@@ -181,14 +195,14 @@
                 {
                     await Task.Delay(timeToDelay);
                 }
-                Console.WriteLine("Starting bucket: " + bucketTimestamp);
+                Console.WriteLine($"{DateTime.Now} - Starting bucket: {bucketTimestamp} - timeToDelay = {timeToDelay}");
                 tasks.Add(eventExecutor.ExecuteSessionEventsAsync(run.EventCaptureOrigin, replayOrigin, bucket, run.ConnectionString, runnerSettings));
-                Console.WriteLine("Ending Delay: " + bucketTimestamp);
+                Console.WriteLine($"{DateTime.Now} - Finished submitting bucket: {bucketTimestamp}");
             }
 
-            Console.WriteLine("Waiting for unfinished executions to complete...");
+            Console.WriteLine($"{DateTime.Now} - Waiting for unfinished executions to complete...");
             await Task.WhenAll(tasks);
-            Console.WriteLine("Executions complete.");
+            Console.WriteLine($"{DateTime.Now} - Executions complete.");
             this.Exceptions.AddRange(eventExecutor.Exceptions);
         }       
 
