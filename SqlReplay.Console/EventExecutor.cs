@@ -111,7 +111,7 @@
                                 }
                                 catch (Exception ex)
                                 {
-                                    this.Exceptions.Add(new TimestampedException(ex));
+                                    this.Exceptions.Add(new TimestampedException(ex, commandText));
                                 }
                             }
                             else if (evt is BulkInsert bulkInsert)
@@ -173,7 +173,7 @@
                                 }
                                 catch (Exception ex)
                                 {
-                                    this.Exceptions.Add(new TimestampedException(ex));
+                                    this.Exceptions.Add(new TimestampedException(ex, bulkInsert.BatchText));
                                 }
                             }
                         }));
