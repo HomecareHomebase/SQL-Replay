@@ -108,7 +108,7 @@
             if (!string.IsNullOrEmpty(eventProcedure))
             {
                 // the Procedure will be just the name of the sproc
-                return matchCriteria.Any(mc =>
+                return matchCriteria.Exists(mc =>
                     string.Equals(eventProcedure, mc, StringComparison.CurrentCultureIgnoreCase)
                 );
             }
@@ -117,7 +117,7 @@
             {
                 // Statement could have text before or after the sproc name. This isn't an exact solution because the
                 // sproc could be mentioned in non-functional code like a comment... which would be weird to include in a RPC statement.
-                return matchCriteria.Any(mc =>
+                return matchCriteria.Exists(mc =>
                     eventStatement.Contains(mc, StringComparison.CurrentCultureIgnoreCase));
             }
             return false;
