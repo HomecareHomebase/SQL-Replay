@@ -53,9 +53,7 @@
                 {
                     foreach (var session in run.Sessions)
                     {
-                        session.Events.RemoveAll(e => !(!matchCriteria.Any(mc =>
-                                                          ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                                                          .GetValueOrDefault()) &&
+                        session.Events.RemoveAll(e => !(!EventMatchesCriteria(matchCriteria, e) &&
                                                       e.Timestamp > restorePoint &&
                                                       e.Timestamp < run.EventCaptureOrigin.AddMinutes(durationInMinutes)));
                     }
@@ -64,9 +62,7 @@
                 {
                     foreach (var session in run.Sessions)
                     {
-                        session.Events.RemoveAll(e => !(!matchCriteria.Any(mc =>
-                                                            ((e as Rpc)?.Procedure?.Equals(mc, StringComparison.CurrentCultureIgnoreCase))
-                                                            .GetValueOrDefault()) &&
+                        session.Events.RemoveAll(e => !(!EventMatchesCriteria(matchCriteria, e) &&
                                                         e.Timestamp > restorePoint));
                     }
                 }
@@ -104,7 +100,28 @@
             }
             run.EventCaptureOrigin = restorePoint;
             return RunEventsAsync(run);
-        }        
+        }
+
+        private static bool EventMatchesCriteria(List<string> matchCriteria, Event e)
+        {
+            string eventProcedure = (e as Rpc)?.Procedure;
+            if (!string.IsNullOrEmpty(eventProcedure))
+            {
+                // the Procedure will be just the name of the sproc
+                return matchCriteria.Any(mc =>
+                    string.Equals(eventProcedure, mc, StringComparison.CurrentCultureIgnoreCase)
+                );
+            }
+            string eventStatement = (e as Rpc)?.Statement;
+            if (!string.IsNullOrEmpty(eventStatement))
+            {
+                // Statement could have text before or after the sproc name. This isn't an exact solution because the
+                // sproc could be mentioned in non-functional code like a comment... which would be weird to include in a RPC statement.
+                return matchCriteria.Any(mc =>
+                    eventStatement.Contains(mc, StringComparison.CurrentCultureIgnoreCase));
+            }
+            return false;
+        }
 
         private async Task RunEventsAsync(Run run)
         {
