@@ -53,7 +53,15 @@
                                 Timestamp = xevent.Timestamp
                             };
                             //Build parameters so we can replay statements as ADO.NET CommandType.StoredProcedure calls in order to avoid extra compilations of raw statement
-                            LoadParameters(con, (Rpc)evt);
+                            try
+                            {
+                                LoadParameters(con, (Rpc) evt);
+                            }
+                            catch (OverflowException)
+                            {
+                                // in the rare event that a parameter value overflows its type, it will error on execution (as it did when run in production) so we just omit it here
+                                return Task.CompletedTask;
+                            }
                         }
                         else if (xevent.Name == "sql_transaction")
                         {

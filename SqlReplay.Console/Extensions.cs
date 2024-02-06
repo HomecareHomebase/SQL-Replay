@@ -15,13 +15,18 @@
             char[] chars = text.ToCharArray();
             int lefts = 1;
             int rights = 0;
+            bool withinQuotes = false;
             for (int i = leftParenthesisIndex + 1; i < chars.Length; ++i)
             {
-                if (chars[i] == '(')
+                if (chars[i] == '\'')
+                {
+                    withinQuotes = !withinQuotes;
+                }
+                else if (chars[i] == '(' && !withinQuotes)
                 {
                     lefts++;
                 }
-                else if (chars[i] == ')')
+                else if (chars[i] == ')' && !withinQuotes)
                 {
                     if (++rights == lefts)
                     {
